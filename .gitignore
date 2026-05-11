@@ -41,3 +41,4 @@ Thumbs.db
 # Local ink identity (machine/user-specific)
 .ink/identity.json
 .ink/runtime/
+*.png

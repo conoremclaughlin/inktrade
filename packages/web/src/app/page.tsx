@@ -1,8 +1,25 @@
+import { Navbar } from '@/components/navbar';
+import { Hero } from '@/components/hero';
+import { Ticker } from '@/components/ticker';
+import { Features } from '@/components/features';
+import { CalculatorPreview } from '@/components/calculator-preview';
+import { Metrics } from '@/components/metrics';
+import { CTA } from '@/components/cta';
+import { Footer } from '@/components/footer';
+
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-8">
-      <h1 className="text-4xl font-bold">Inktrade</h1>
-      <p className="mt-4 text-lg text-gray-600">Collectible card game marketplace</p>
-    </main>
+    <>
+      <Navbar />
+      <main>
+        <Hero />
+        <Ticker />
+        <Features />
+        <CalculatorPreview />
+        <Metrics />
+        <CTA />
+      </main>
+      <Footer />
+    </>
   );
 }
