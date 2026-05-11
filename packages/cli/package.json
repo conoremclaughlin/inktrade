@@ -14,7 +14,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@inktrade/core": "workspace:*",
+    "@inktrade/engine": "workspace:*",
     "commander": "^13.1.0"
   },
   "devDependencies": {

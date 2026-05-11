@@ -1,13 +1,13 @@
 import { Command } from 'commander';
-import { getProvider } from '../provider.js';
+import { getService } from '../provider.js';
 import { formatQuote } from '../format.js';
 
 export const quoteCommand = new Command('quote')
   .description('Get stock quote(s)')
   .argument('<symbols...>', 'ticker symbol(s)')
   .action(async (symbols: string[]) => {
-    const provider = getProvider();
-    const quotes = await provider.getQuotes(symbols.map((s) => s.toUpperCase()));
+    const svc = await getService();
+    const quotes = await svc.quotes(symbols);
 
     for (const q of quotes) {
       console.log(formatQuote(q));

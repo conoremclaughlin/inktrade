@@ -1,15 +1,11 @@
-import { YahooFinanceProvider, type MarketDataProvider } from '@inktrade/core';
+import { MarketService, getDefaultProvider } from '@inktrade/engine';
 
-let provider: MarketDataProvider | null = null;
+let service: MarketService | null = null;
 
-export function getProvider(): MarketDataProvider {
-  if (!provider) {
-    // Default to Yahoo Finance — swap to Schwab when credentials are configured
-    provider = new YahooFinanceProvider();
+export async function getService(): Promise<MarketService> {
+  if (!service) {
+    const provider = await getDefaultProvider();
+    service = new MarketService(provider);
   }
-  return provider;
-}
-
-export function setProvider(p: MarketDataProvider): void {
-  provider = p;
+  return service;
 }

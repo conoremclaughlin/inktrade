@@ -1,4 +1,4 @@
-import type { Quote, OptionContract, OptionGreeks } from '@inktrade/core';
+import type { Quote, OptionContract, OptionGreeks } from '@inktrade/engine';
 
 const GREEN = '\x1b[32m';
 const RED = '\x1b[31m';

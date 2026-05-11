@@ -4,6 +4,8 @@ import { Command } from 'commander';
 import { quoteCommand } from './commands/quote.js';
 import { chainCommand } from './commands/chain.js';
 import { leverageCommand } from './commands/leverage.js';
+import { configCommand } from './commands/config.js';
+import { authCommand } from './commands/auth.js';
 
 const program = new Command()
   .name('inktrade')
@@ -13,6 +15,8 @@ const program = new Command()
 program.addCommand(quoteCommand);
 program.addCommand(chainCommand);
 program.addCommand(leverageCommand);
+program.addCommand(configCommand);
+program.addCommand(authCommand);
 
 program.parseAsync().catch((err) => {
   console.error(err.message);

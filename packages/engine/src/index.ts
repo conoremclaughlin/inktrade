@@ -31,3 +31,16 @@ export {
   type LeverageSurfaceParams,
   type LeverageAnalysisParams,
 } from './leverage.js';
+
+// Services
+export { MarketService } from './services/index.js';
+
+// Config & factory
+export {
+  loadConfig,
+  saveConfig,
+  FileTokenStore,
+  type InktradeConfig,
+  type ProviderType,
+} from './config.js';
+export { createProvider, getDefaultProvider, resetProvider } from './factory.js';

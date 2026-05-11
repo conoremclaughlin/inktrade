@@ -1,8 +1,8 @@
 {
-  "name": "@inktrade/core",
+  "name": "@inktrade/engine",
   "version": "0.1.0",
   "private": true,
-  "description": "Inktrade core — market data providers, options math, leverage analysis",
+  "description": "Inktrade engine — market data providers, options math, leverage analysis",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
