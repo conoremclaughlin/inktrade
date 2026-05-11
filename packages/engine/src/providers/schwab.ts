@@ -10,6 +10,7 @@ import type {
   PriceHistoryQuery,
 } from '../types/index.js';
 
+// Read-only: marketdata endpoint only. Trading lives at /trader/v1 — add intentionally.
 const SCHWAB_API_BASE = 'https://api.schwabapi.com/marketdata/v1';
 const SCHWAB_AUTH_URL = 'https://api.schwabapi.com/v1/oauth/authorize';
 const SCHWAB_TOKEN_URL = 'https://api.schwabapi.com/v1/oauth/token';
@@ -148,6 +149,7 @@ export class SchwabProvider implements MarketDataProvider {
     await this.tokenStore.save(this.tokens);
   }
 
+  // GET-only: this provider is read-only by design. No POST/PUT/DELETE to Schwab.
   private async request<T>(path: string, params?: Record<string, string>): Promise<T> {
     const token = await this.ensureToken();
     const url = new URL(`${SCHWAB_API_BASE}${path}`);
@@ -158,6 +160,7 @@ export class SchwabProvider implements MarketDataProvider {
     }
 
     const resp = await fetch(url, {
+      method: 'GET',
       headers: { Authorization: `Bearer ${token}` },
     });
 

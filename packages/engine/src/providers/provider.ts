@@ -6,6 +6,7 @@ import type {
   PriceHistoryQuery,
 } from '../types/index.js';
 
+// Read-only interface — no trading, order placement, or account mutations.
 export interface MarketDataProvider {
   readonly name: string;
 
