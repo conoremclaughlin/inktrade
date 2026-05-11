@@ -1,0 +1,25 @@
+{
+  "name": "@inktrade/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Inktrade CLI — stock quotes, options chains, leverage analysis",
+  "type": "module",
+  "bin": {
+    "inktrade": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@inktrade/core": "workspace:*",
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}
