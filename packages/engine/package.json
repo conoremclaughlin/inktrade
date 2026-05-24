@@ -10,10 +10,28 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./letf": {
+      "types": "./dist/letf/index.d.ts",
+      "import": "./dist/letf/index.js"
+    },
+    "./rolling": {
+      "types": "./dist/rolling/index.d.ts",
+      "import": "./dist/rolling/index.js"
+    },
+    "./portfolio": {
+      "types": "./dist/portfolio/index.d.ts",
+      "import": "./dist/portfolio/index.js"
+    },
+    "./math": {
+      "types": "./dist/math.d.ts",
+      "import": "./dist/math.js"
     }
   },
   "scripts": {
     "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
@@ -22,6 +40,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.6",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.6"
   }
 }
