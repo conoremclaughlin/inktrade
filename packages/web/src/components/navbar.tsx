@@ -45,10 +45,28 @@ export function Navbar() {
             Features
           </a>
           <a
-            href="#calculator"
+            href="/calculator"
             className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
           >
             Calculator
+          </a>
+          <a
+            href="/letf"
+            className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
+          >
+            LETF
+          </a>
+          <a
+            href="/stock"
+            className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
+          >
+            Stock
+          </a>
+          <a
+            href="/strategies"
+            className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
+          >
+            Strategies
           </a>
           <a
             href="#pricing"
