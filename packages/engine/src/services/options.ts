@@ -1,4 +1,4 @@
-import type { MarketDataProvider } from '../providers/provider.js';
+import type { MarketDataService } from './market-data.js';
 import type {
   Quote,
   OptionChain,
@@ -10,19 +10,19 @@ import type {
 import type { LeverageAnalysis } from '../types/leverage.js';
 import { analyzeLeverage } from '../leverage.js';
 
-export class MarketService {
-  constructor(private provider: MarketDataProvider) {}
+export class OptionsService {
+  constructor(private dataService: MarketDataService) {}
 
-  get providerName(): string {
-    return this.provider.name;
+  get serviceName(): string {
+    return this.dataService.name;
   }
 
   async quote(symbol: string): Promise<Quote> {
-    return this.provider.getQuote(symbol.toUpperCase());
+    return this.dataService.getQuote(symbol.toUpperCase());
   }
 
   async quotes(symbols: string[]): Promise<Quote[]> {
-    return this.provider.getQuotes(symbols.map((s) => s.toUpperCase()));
+    return this.dataService.getQuotes(symbols.map((s) => s.toUpperCase()));
   }
 
   async chain(params: {
@@ -51,7 +51,7 @@ export class MarketService {
       };
     }
 
-    return this.provider.getOptionChain(query);
+    return this.dataService.getOptionChain(query);
   }
 
   async leverage(params: {
@@ -108,7 +108,7 @@ export class MarketService {
     symbol: string,
     period: PriceHistoryPeriod = '3mo',
   ): Promise<PriceHistoryBar[]> {
-    return this.provider.getPriceHistory({
+    return this.dataService.getPriceHistory({
       symbol: symbol.toUpperCase(),
       period,
     });

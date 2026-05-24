@@ -1,24 +1,24 @@
-import type { MarketDataProvider } from './providers/provider.js';
-import { YahooFinanceProvider } from './providers/yahoo.js';
-import { SchwabProvider } from './providers/schwab.js';
-import { loadConfig, FileTokenStore, type InktradeConfig } from './config.js';
+import type { MarketDataService } from './services/market-data.js';
+import { YahooMarketService } from './services/yahoo.js';
+import { SchwabMarketService } from './services/schwab.js';
+import { loadConfig, createTokenStore, type InktradeConfig } from './config.js';
 
-let cachedProvider: MarketDataProvider | null = null;
+let cachedService: MarketDataService | null = null;
 
-export function createProvider(config: InktradeConfig): MarketDataProvider {
+export function createMarketDataService(config: InktradeConfig): MarketDataService {
   if (config.provider === 'schwab' && config.schwab) {
-    return new SchwabProvider(config.schwab, new FileTokenStore());
+    return new SchwabMarketService(config.schwab, createTokenStore());
   }
-  return new YahooFinanceProvider();
+  return new YahooMarketService();
 }
 
-export async function getDefaultProvider(): Promise<MarketDataProvider> {
-  if (cachedProvider) return cachedProvider;
+export async function getDefaultMarketDataService(): Promise<MarketDataService> {
+  if (cachedService) return cachedService;
   const config = await loadConfig();
-  cachedProvider = createProvider(config);
-  return cachedProvider;
+  cachedService = createMarketDataService(config);
+  return cachedService;
 }
 
-export function resetProvider(): void {
-  cachedProvider = null;
+export function resetMarketDataService(): void {
+  cachedService = null;
 }

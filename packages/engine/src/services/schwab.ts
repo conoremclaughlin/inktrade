@@ -1,4 +1,4 @@
-import type { MarketDataProvider } from './provider.js';
+import type { MarketDataService } from './market-data.js';
 import type {
   Quote,
   OptionChain,
@@ -33,7 +33,7 @@ export interface SchwabTokenStore {
   save(tokens: SchwabTokens): Promise<void>;
 }
 
-export class SchwabProvider implements MarketDataProvider {
+export class SchwabMarketService implements MarketDataService {
   readonly name = 'schwab';
   private credentials: SchwabCredentials;
   private tokenStore: SchwabTokenStore;

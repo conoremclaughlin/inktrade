@@ -14,14 +14,16 @@ export type {
   LeverageAnalysis,
 } from './types/index.js';
 
-export type { MarketDataProvider } from './providers/provider.js';
-export { YahooFinanceProvider } from './providers/yahoo.js';
+// Services
+export type { MarketDataService } from './services/index.js';
 export {
-  SchwabProvider,
+  YahooMarketService,
+  SchwabMarketService,
   type SchwabCredentials,
   type SchwabTokens,
   type SchwabTokenStore,
-} from './providers/schwab.js';
+  OptionsService,
+} from './services/index.js';
 
 export {
   blackScholesPrice,
@@ -32,15 +34,39 @@ export {
   type LeverageAnalysisParams,
 } from './leverage.js';
 
-// Services
-export { MarketService } from './services/index.js';
+// LETF
+export type {
+  LetfRegistryEntry,
+  LetfProfile,
+  LetfHolding,
+  LetfHoldingsData,
+  LetfHistoryPoint,
+  DecaySimResult,
+  MonteCarloPercentiles,
+  RedDayCell,
+} from './letf/index.js';
+export {
+  lookupLetf,
+  isLetf,
+  allLetfTickers,
+  simulateDecay,
+  annualizedDrag,
+  runMonteCarlo,
+  computeRedDayTable,
+} from './letf/index.js';
 
 // Config & factory
 export {
   loadConfig,
   saveConfig,
   FileTokenStore,
+  KeychainTokenStore,
+  createTokenStore,
   type InktradeConfig,
   type ProviderType,
 } from './config.js';
-export { createProvider, getDefaultProvider, resetProvider } from './factory.js';
+export {
+  createMarketDataService,
+  getDefaultMarketDataService,
+  resetMarketDataService,
+} from './factory.js';

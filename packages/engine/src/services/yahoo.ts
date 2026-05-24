@@ -1,5 +1,5 @@
 import YahooFinance from 'yahoo-finance2';
-import type { MarketDataProvider } from './provider.js';
+import type { MarketDataService } from './market-data.js';
 import type {
   Quote,
   OptionChain,
@@ -65,7 +65,7 @@ function mapContract(
   };
 }
 
-export class YahooFinanceProvider implements MarketDataProvider {
+export class YahooMarketService implements MarketDataService {
   readonly name = 'yahoo-finance';
   private yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 

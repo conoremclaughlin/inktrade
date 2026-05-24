@@ -1,11 +1,11 @@
-import { MarketService, getDefaultProvider } from '@inktrade/engine';
+import { OptionsService, getDefaultMarketDataService } from '@inktrade/engine';
 
-let service: MarketService | null = null;
+let service: OptionsService | null = null;
 
-export async function getService(): Promise<MarketService> {
+export async function getService(): Promise<OptionsService> {
   if (!service) {
-    const provider = await getDefaultProvider();
-    service = new MarketService(provider);
+    const dataService = await getDefaultMarketDataService();
+    service = new OptionsService(dataService);
   }
   return service;
 }

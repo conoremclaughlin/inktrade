@@ -1,9 +1,9 @@
 import { Command } from 'commander';
 import {
   loadConfig,
-  SchwabProvider,
-  FileTokenStore,
-  resetProvider,
+  SchwabMarketService,
+  createTokenStore,
+  resetMarketDataService,
 } from '@inktrade/engine';
 
 export const authCommand = new Command('auth')
@@ -23,10 +23,10 @@ authCommand
       process.exit(1);
     }
 
-    const provider = new SchwabProvider(config.schwab, new FileTokenStore());
+    const schwab = new SchwabMarketService(config.schwab, createTokenStore());
 
     if (!opts.code) {
-      const url = provider.getAuthorizationUrl();
+      const url = schwab.getAuthorizationUrl();
       console.log('\x1b[1mOpen this URL in your browser to authorize:\x1b[0m\n');
       console.log(url);
       console.log(
@@ -37,10 +37,11 @@ authCommand
     }
 
     try {
-      await provider.exchangeCode(opts.code);
-      resetProvider();
+      await schwab.exchangeCode(opts.code);
+      resetMarketDataService();
       console.log('\x1b[32mSchwab authentication successful!\x1b[0m');
-      console.log('\x1b[2mTokens saved to ~/.inktrade/schwab-tokens.json\x1b[0m');
+      const store = process.platform === 'darwin' ? 'macOS Keychain' : '~/.inktrade/schwab-tokens.json';
+      console.log(`\x1b[2mTokens saved to ${store}\x1b[0m`);
       console.log(
         '\x1b[33mNote: Refresh tokens expire after 7 days. You\'ll need to re-authenticate.\x1b[0m',
       );
