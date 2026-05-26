@@ -51,6 +51,8 @@ export interface LetfHoldingsData {
 
 export interface LetfHistoryPoint {
   date: string;
+  letfPrice: number;
+  underlyingPrice: number;
   letfCumReturn: number;
   underlyingCumReturn: number;
   naiveCumReturn: number;

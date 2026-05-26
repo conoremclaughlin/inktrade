@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
       const naiveCumReturn = underlyingCumReturn * registry.leverageFactor;
       const divergence = letfCumReturn - naiveCumReturn;
 
-      return { date, letfCumReturn, underlyingCumReturn, naiveCumReturn, divergence };
+      return { date, letfPrice, underlyingPrice, letfCumReturn, underlyingCumReturn, naiveCumReturn, divergence };
     });
 
     // Compute summary stats
