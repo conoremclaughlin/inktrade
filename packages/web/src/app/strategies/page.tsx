@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/navbar';
 import { PortfolioInput } from '@/components/strategies/portfolio-input';
 import { TickerGrid } from '@/components/strategies/ticker-grid';
@@ -12,7 +13,22 @@ import { usePortfolioAnalysis } from '@/lib/hooks';
 const DEFAULT_SYMBOLS = ['MU', 'GOOG', 'TQQQ', 'SOXL'];
 
 export default function StrategiesPage() {
-  const [symbols, setSymbols] = useState<string[]>(DEFAULT_SYMBOLS);
+  const searchParams = useSearchParams();
+
+  const [symbols, setSymbols] = useState<string[]>(() => {
+    const s = searchParams.get('symbols');
+    if (s) return s.split(',').map((t) => t.trim().toUpperCase()).filter(Boolean);
+    return DEFAULT_SYMBOLS;
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    const joined = symbols.join(',');
+    if (joined !== DEFAULT_SYMBOLS.join(',')) params.set('symbols', joined);
+    const qs = params.toString();
+    window.history.replaceState(null, '', `/strategies${qs ? `?${qs}` : ''}`);
+  }, [symbols]);
+
   const { data, isLoading, error } = usePortfolioAnalysis(symbols);
 
   return (

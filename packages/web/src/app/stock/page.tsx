@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -12,6 +12,7 @@ import {
   Tooltip,
   Bar,
 } from 'recharts';
+import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/navbar';
 import { useQuote, useTickerHistory, type TickerHistoryResponse } from '@/lib/hooks';
 
@@ -180,9 +181,25 @@ function PriceChart({ data, symbol }: { data: TickerHistoryResponse; symbol: str
 }
 
 export default function StockPage() {
-  const [symbol, setSymbol] = useState('SPY');
-  const [input, setInput] = useState('SPY');
-  const [period, setPeriod] = useState<string>('1Y');
+  const searchParams = useSearchParams();
+
+  const [symbol, setSymbol] = useState(
+    () => searchParams.get('symbol')?.toUpperCase() || 'SPY'
+  );
+  const [input, setInput] = useState(
+    () => searchParams.get('symbol')?.toUpperCase() || 'SPY'
+  );
+  const [period, setPeriod] = useState<string>(
+    () => searchParams.get('period')?.toUpperCase() || '1Y'
+  );
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (symbol !== 'SPY') params.set('symbol', symbol);
+    if (period !== '1Y') params.set('period', period);
+    const qs = params.toString();
+    window.history.replaceState(null, '', `/stock${qs ? `?${qs}` : ''}`);
+  }, [symbol, period]);
 
   const quote = useQuote(symbol);
   const history = useTickerHistory(symbol, PERIOD_MAP[period] ?? '1y');

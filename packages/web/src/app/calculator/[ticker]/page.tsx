@@ -102,8 +102,15 @@ function Calculator({ symbol }: { symbol: string }) {
   const [optionType, setOptionType] = useState<OptionType>(
     () => (searchParams.get('type') as OptionType) || 'call'
   );
-  const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
-  const [selectedExpiry, setSelectedExpiry] = useState<string | undefined>();
+  const [selectedStrike, setSelectedStrike] = useState<number | null>(
+    () => {
+      const s = searchParams.get('strike');
+      return s ? parseFloat(s) : null;
+    }
+  );
+  const [selectedExpiry, setSelectedExpiry] = useState<string | undefined>(
+    () => searchParams.get('expiry') ?? undefined
+  );
   const [targetPrice, setTargetPrice] = useState<number | null>(
     () => {
       const t = searchParams.get('target');
@@ -134,9 +141,11 @@ function Calculator({ symbol }: { symbol: string }) {
     const params = new URLSearchParams();
     if (optionType !== 'call') params.set('type', optionType);
     if (targetPrice !== null) params.set('target', String(Math.round(targetPrice * 100) / 100));
+    if (selectedStrike !== null) params.set('strike', String(selectedStrike));
+    if (selectedExpiry) params.set('expiry', selectedExpiry);
     const qs = params.toString();
     window.history.replaceState(null, '', `/calculator/${symbol}${qs ? `?${qs}` : ''}`);
-  }, [symbol, optionType, targetPrice]);
+  }, [symbol, optionType, targetPrice, selectedStrike, selectedExpiry]);
 
   useEffect(() => {
     if (quote.data && targetPrice === null) {

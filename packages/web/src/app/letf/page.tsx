@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/navbar';
 import { useLetfProfile, useLetfHoldings, useLetfHistory, useTickerHistory } from '@/lib/hooks';
 import { LetfMetadataCard } from '@/components/letf/letf-metadata-card';
@@ -122,9 +123,26 @@ function CompareInput({ onSubmit, onClear, activeSymbol }: {
 }
 
 export default function LetfPage() {
-  const [symbol, setSymbol] = useState<string>('TQQQ');
-  const [period, setPeriod] = useState('1y');
-  const [compareSymbol, setCompareSymbol] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+
+  const [symbol, setSymbol] = useState<string>(
+    () => searchParams.get('symbol')?.toUpperCase() || 'TQQQ'
+  );
+  const [period, setPeriod] = useState(
+    () => searchParams.get('period') || '1y'
+  );
+  const [compareSymbol, setCompareSymbol] = useState<string | null>(
+    () => searchParams.get('compare')?.toUpperCase() || null
+  );
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (symbol !== 'TQQQ') params.set('symbol', symbol);
+    if (period !== '1y') params.set('period', period);
+    if (compareSymbol) params.set('compare', compareSymbol);
+    const qs = params.toString();
+    window.history.replaceState(null, '', `/letf${qs ? `?${qs}` : ''}`);
+  }, [symbol, period, compareSymbol]);
 
   const profile = useLetfProfile(symbol);
   const holdings = useLetfHoldings(symbol);
