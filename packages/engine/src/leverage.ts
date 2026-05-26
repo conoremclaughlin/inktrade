@@ -21,7 +21,7 @@ function normalCDF(x: number): number {
   const sign = x < 0 ? -1 : 1;
   x = Math.abs(x);
 
-  const t = 1.0 / (1.0 + p * x);
+  const t = 1.0 / (1.0 + p * x / Math.SQRT2);
   const y = 1.0 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x / 2);
 
   return 0.5 * (1.0 + sign * y);

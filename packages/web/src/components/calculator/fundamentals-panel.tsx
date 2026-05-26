@@ -29,8 +29,8 @@ function formatQuarter(dateStr: string): string {
 function formatLargeNumber(n: number): string {
   const abs = Math.abs(n);
   const sign = n < 0 ? '-' : '';
-  if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(1)}T`;
-  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(1)}B`;
+  if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(0)}M`;
   return `$${n.toLocaleString()}`;
 }
@@ -194,6 +194,149 @@ export function FundamentalsPanel({
           )}
         </div>
       )}
+
+      {/* Valuation + Market Cap cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        <div className="glass rounded-lg px-3 py-2.5">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
+            Market Cap
+          </div>
+          <div className="text-[16px] font-mono font-bold text-text-primary">
+            {formatLargeNumber(data.marketCap)}
+          </div>
+        </div>
+
+        <div className="glass rounded-lg px-3 py-2.5">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
+            Shares Out.
+          </div>
+          <div className="text-[16px] font-mono font-bold text-text-primary">
+            {data.sharesOutstanding >= 1e9
+              ? `${(data.sharesOutstanding / 1e9).toFixed(2)}B`
+              : data.sharesOutstanding >= 1e6
+                ? `${(data.sharesOutstanding / 1e6).toFixed(0)}M`
+                : data.sharesOutstanding.toLocaleString()}
+          </div>
+        </div>
+
+        <div className="glass rounded-lg px-3 py-2.5">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
+            Trailing P/E
+          </div>
+          <div className="text-[16px] font-mono font-bold text-text-primary">
+            {data.trailingPe ? `${data.trailingPe.toFixed(1)}x` : '—'}
+          </div>
+          <div className="text-[10px] font-mono text-text-tertiary mt-0.5">
+            TTM EPS ${data.trailingEps.toFixed(2)}
+          </div>
+        </div>
+
+        <div className="glass rounded-lg px-3 py-2.5">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
+            Run-Rate P/E
+          </div>
+          <div className="text-[16px] font-mono font-bold text-[#f59e0b]">
+            {runRatePe ? `${runRatePe.toFixed(1)}x` : '—'}
+          </div>
+          <div className="text-[10px] font-mono text-text-tertiary mt-0.5">
+            Latest Q ×4 ${runRateEps.toFixed(2)}
+          </div>
+        </div>
+
+        <div className="glass rounded-lg px-3 py-2.5">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
+            Current FY P/E
+          </div>
+          <div className="text-[16px] font-mono font-bold text-accent-bright">
+            {data.currentFyPe ? `${data.currentFyPe.toFixed(1)}x` : '—'}
+          </div>
+          <div className="text-[10px] font-mono text-text-tertiary mt-0.5">
+            FY Est. ${data.currentFyEps.toFixed(2)}
+          </div>
+        </div>
+
+        <div className="glass rounded-lg px-3 py-2.5">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
+            Next FY P/E
+          </div>
+          <div className="text-[16px] font-mono font-bold text-[#a78bfa]">
+            {data.nextFyPe ? `${data.nextFyPe.toFixed(1)}x` : '—'}
+          </div>
+          <div className="text-[10px] font-mono text-text-tertiary mt-0.5">
+            +1Y Est. ${data.nextFyEps.toFixed(2)}
+            {data.nextFyGrowth != null && (
+              <span className="text-emerald ml-1">+{(data.nextFyGrowth * 100).toFixed(0)}%</span>
+            )}
+          </div>
+        </div>
+
+        <div className="glass rounded-lg px-3 py-2.5">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
+            At Target
+          </div>
+          {targetMarketCap !== null && targetDelta !== null && targetDeltaPct !== null ? (
+            <>
+              <div className="text-[16px] font-mono font-bold text-text-primary">
+                {formatLargeNumber(targetMarketCap)}
+              </div>
+              <div className={`text-[10px] font-mono font-medium mt-0.5 ${targetDelta >= 0 ? 'text-emerald' : 'text-rose'}`}>
+                {targetDelta >= 0 ? '+' : ''}{formatLargeNumber(targetDelta)} ({targetDelta >= 0 ? '+' : ''}{targetDeltaPct.toFixed(1)}%)
+              </div>
+            </>
+          ) : (
+            <div className="text-[14px] font-mono text-text-muted">—</div>
+          )}
+        </div>
+
+        <div className="glass rounded-lg px-3 py-2.5">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
+            P/S (TTM)
+          </div>
+          <div className="text-[16px] font-mono font-bold text-text-primary">
+            {priceRevenue.toFixed(1)}x
+          </div>
+          {targetPriceRevenue !== null && (
+            <div className="text-[10px] font-mono text-text-tertiary mt-0.5">
+              {targetPriceRevenue.toFixed(1)}x at target
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* P/E explanation */}
+      <div className="rounded-lg border border-border-subtle bg-surface/30 px-4 py-3">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted mb-1.5">
+          P/E Comparison
+        </div>
+        <p className="text-[12px] text-text-secondary leading-relaxed">
+          {data.trailingPe !== null && (
+            <><span className="font-mono font-medium text-text-primary">Trailing {data.trailingPe.toFixed(1)}x</span> — price / last 4 reported quarters of EPS (${data.trailingEps.toFixed(2)}). The standard backward-looking P/E. </>
+          )}
+          {runRatePe !== null && (
+            <><span className="font-mono font-medium text-[#f59e0b]">Run-Rate {runRatePe.toFixed(1)}x</span> — latest quarter&apos;s net income annualized (×4) at {latestNetMarginPct.toFixed(1)}% net margin → ${runRateEps.toFixed(2)} EPS. What you&apos;re paying if current profitability holds. </>
+          )}
+          {data.currentFyPe !== null && (
+            <><span className="font-mono font-medium text-accent-bright">Current FY {data.currentFyPe.toFixed(1)}x</span> — analyst consensus for the current fiscal year (${data.currentFyEps.toFixed(2)} EPS{data.currentFyGrowth != null ? `, +${(data.currentFyGrowth * 100).toFixed(0)}% YoY` : ''}). This is what most platforms call &quot;forward P/E.&quot; </>
+          )}
+          {data.nextFyPe !== null && (
+            <><span className="font-mono font-medium text-[#a78bfa]">Next FY {data.nextFyPe.toFixed(1)}x</span> — analyst consensus for the following fiscal year (${data.nextFyEps.toFixed(2)} EPS{data.nextFyGrowth != null ? `, +${(data.nextFyGrowth * 100).toFixed(0)}% growth` : ''}). Further out and less certain.</>
+          )}
+        </p>
+        {data.currentFyPe !== null && runRatePe !== null && Math.abs(data.currentFyPe - runRatePe) > 0.5 && (
+          <p className="text-[12px] text-text-secondary leading-relaxed mt-1.5">
+            {data.currentFyPe < runRatePe
+              ? `Current FY P/E is ${(runRatePe - data.currentFyPe).toFixed(1)}x lower than run-rate — analysts expect earnings to grow beyond the latest quarter's pace.`
+              : `Current FY P/E is ${(data.currentFyPe - runRatePe).toFixed(1)}x higher than run-rate — analysts expect margins or revenue to pull back from the latest quarter.`
+            }
+          </p>
+        )}
+        {targetCurrentFyPe !== null && runRateEps > 0 && (
+          <p className="text-[12px] text-text-secondary leading-relaxed mt-1.5">
+            At ${targetPrice?.toFixed(0)} target: current FY P/E <span className="font-mono font-medium text-text-primary">{targetCurrentFyPe.toFixed(1)}x</span>, run-rate P/E <span className="font-mono font-medium text-text-primary">{(targetPrice! / runRateEps).toFixed(1)}x</span>
+            {targetNextFyPe !== null && <>, next FY P/E <span className="font-mono font-medium text-text-primary">{targetNextFyPe.toFixed(1)}x</span></>}.
+          </p>
+        )}
+      </div>
 
       {/* Income statement chart */}
       <div className="rounded-xl border border-border-subtle bg-deep/30 p-4">
@@ -409,148 +552,6 @@ export function FundamentalsPanel({
         </div>
       )}
 
-      {/* Valuation + Market Cap cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-        <div className="glass rounded-lg px-3 py-2.5">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
-            Market Cap
-          </div>
-          <div className="text-[16px] font-mono font-bold text-text-primary">
-            {formatLargeNumber(data.marketCap)}
-          </div>
-        </div>
-
-        <div className="glass rounded-lg px-3 py-2.5">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
-            Shares Out.
-          </div>
-          <div className="text-[16px] font-mono font-bold text-text-primary">
-            {data.sharesOutstanding >= 1e9
-              ? `${(data.sharesOutstanding / 1e9).toFixed(2)}B`
-              : data.sharesOutstanding >= 1e6
-                ? `${(data.sharesOutstanding / 1e6).toFixed(0)}M`
-                : data.sharesOutstanding.toLocaleString()}
-          </div>
-        </div>
-
-        <div className="glass rounded-lg px-3 py-2.5">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
-            Trailing P/E
-          </div>
-          <div className="text-[16px] font-mono font-bold text-text-primary">
-            {data.trailingPe ? `${data.trailingPe.toFixed(1)}x` : '—'}
-          </div>
-          <div className="text-[10px] font-mono text-text-tertiary mt-0.5">
-            TTM EPS ${data.trailingEps.toFixed(2)}
-          </div>
-        </div>
-
-        <div className="glass rounded-lg px-3 py-2.5">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
-            Run-Rate P/E
-          </div>
-          <div className="text-[16px] font-mono font-bold text-[#f59e0b]">
-            {runRatePe ? `${runRatePe.toFixed(1)}x` : '—'}
-          </div>
-          <div className="text-[10px] font-mono text-text-tertiary mt-0.5">
-            Latest Q ×4 ${runRateEps.toFixed(2)}
-          </div>
-        </div>
-
-        <div className="glass rounded-lg px-3 py-2.5">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
-            Current FY P/E
-          </div>
-          <div className="text-[16px] font-mono font-bold text-accent-bright">
-            {data.currentFyPe ? `${data.currentFyPe.toFixed(1)}x` : '—'}
-          </div>
-          <div className="text-[10px] font-mono text-text-tertiary mt-0.5">
-            FY Est. ${data.currentFyEps.toFixed(2)}
-          </div>
-        </div>
-
-        <div className="glass rounded-lg px-3 py-2.5">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
-            Next FY P/E
-          </div>
-          <div className="text-[16px] font-mono font-bold text-[#a78bfa]">
-            {data.nextFyPe ? `${data.nextFyPe.toFixed(1)}x` : '—'}
-          </div>
-          <div className="text-[10px] font-mono text-text-tertiary mt-0.5">
-            +1Y Est. ${data.nextFyEps.toFixed(2)}
-            {data.nextFyGrowth != null && (
-              <span className="text-emerald ml-1">+{(data.nextFyGrowth * 100).toFixed(0)}%</span>
-            )}
-          </div>
-        </div>
-
-        <div className="glass rounded-lg px-3 py-2.5">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
-            At Target
-          </div>
-          {targetMarketCap !== null && targetDelta !== null && targetDeltaPct !== null ? (
-            <>
-              <div className="text-[16px] font-mono font-bold text-text-primary">
-                {formatLargeNumber(targetMarketCap)}
-              </div>
-              <div className={`text-[10px] font-mono font-medium mt-0.5 ${targetDelta >= 0 ? 'text-emerald' : 'text-rose'}`}>
-                {targetDelta >= 0 ? '+' : ''}{formatLargeNumber(targetDelta)} ({targetDelta >= 0 ? '+' : ''}{targetDeltaPct.toFixed(1)}%)
-              </div>
-            </>
-          ) : (
-            <div className="text-[14px] font-mono text-text-muted">—</div>
-          )}
-        </div>
-
-        <div className="glass rounded-lg px-3 py-2.5">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
-            P/S (TTM)
-          </div>
-          <div className="text-[16px] font-mono font-bold text-text-primary">
-            {priceRevenue.toFixed(1)}x
-          </div>
-          {targetPriceRevenue !== null && (
-            <div className="text-[10px] font-mono text-text-tertiary mt-0.5">
-              {targetPriceRevenue.toFixed(1)}x at target
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* P/E explanation */}
-      <div className="rounded-lg border border-border-subtle bg-surface/30 px-4 py-3">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted mb-1.5">
-          P/E Comparison
-        </div>
-        <p className="text-[12px] text-text-secondary leading-relaxed">
-          {data.trailingPe !== null && (
-            <><span className="font-mono font-medium text-text-primary">Trailing {data.trailingPe.toFixed(1)}x</span> — price / last 4 reported quarters of EPS (${data.trailingEps.toFixed(2)}). The standard backward-looking P/E. </>
-          )}
-          {runRatePe !== null && (
-            <><span className="font-mono font-medium text-[#f59e0b]">Run-Rate {runRatePe.toFixed(1)}x</span> — latest quarter&apos;s net income annualized (×4) at {latestNetMarginPct.toFixed(1)}% net margin → ${runRateEps.toFixed(2)} EPS. What you&apos;re paying if current profitability holds. </>
-          )}
-          {data.currentFyPe !== null && (
-            <><span className="font-mono font-medium text-accent-bright">Current FY {data.currentFyPe.toFixed(1)}x</span> — analyst consensus for the current fiscal year (${data.currentFyEps.toFixed(2)} EPS{data.currentFyGrowth != null ? `, +${(data.currentFyGrowth * 100).toFixed(0)}% YoY` : ''}). This is what most platforms call &quot;forward P/E.&quot; </>
-          )}
-          {data.nextFyPe !== null && (
-            <><span className="font-mono font-medium text-[#a78bfa]">Next FY {data.nextFyPe.toFixed(1)}x</span> — analyst consensus for the following fiscal year (${data.nextFyEps.toFixed(2)} EPS{data.nextFyGrowth != null ? `, +${(data.nextFyGrowth * 100).toFixed(0)}% growth` : ''}). Further out and less certain.</>
-          )}
-        </p>
-        {data.currentFyPe !== null && runRatePe !== null && Math.abs(data.currentFyPe - runRatePe) > 0.5 && (
-          <p className="text-[12px] text-text-secondary leading-relaxed mt-1.5">
-            {data.currentFyPe < runRatePe
-              ? `Current FY P/E is ${(runRatePe - data.currentFyPe).toFixed(1)}x lower than run-rate — analysts expect earnings to grow beyond the latest quarter's pace.`
-              : `Current FY P/E is ${(data.currentFyPe - runRatePe).toFixed(1)}x higher than run-rate — analysts expect margins or revenue to pull back from the latest quarter.`
-            }
-          </p>
-        )}
-        {targetCurrentFyPe !== null && runRateEps > 0 && (
-          <p className="text-[12px] text-text-secondary leading-relaxed mt-1.5">
-            At ${targetPrice?.toFixed(0)} target: current FY P/E <span className="font-mono font-medium text-text-primary">{targetCurrentFyPe.toFixed(1)}x</span>, run-rate P/E <span className="font-mono font-medium text-text-primary">{(targetPrice! / runRateEps).toFixed(1)}x</span>
-            {targetNextFyPe !== null && <>, next FY P/E <span className="font-mono font-medium text-text-primary">{targetNextFyPe.toFixed(1)}x</span></>}.
-          </p>
-        )}
-      </div>
     </div>
   );
 }
