@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/navbar';
+import { OIDistributionChart } from '@/components/stock/oi-chart';
 import { useQuote, useTickerHistory, type TickerHistoryResponse } from '@/lib/hooks';
 
 const PERIODS = ['1M', '3M', '6M', '1Y', '2Y', '5Y'] as const;
@@ -44,13 +45,25 @@ function formatLargeNumber(n: number): string {
   return `$${n.toLocaleString()}`;
 }
 
+function formatVolume(n: number): string {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`;
+  return String(n);
+}
+
 function PriceChart({ data, symbol }: { data: TickerHistoryResponse; symbol: string }) {
   const chartData = useMemo(() => {
-    return data.points.map((p) => ({
-      date: p.date,
-      close: p.close,
-      cumReturn: p.cumReturn,
-    }));
+    return data.points.map((p, i) => {
+      const prevClose = i > 0 ? data.points[i - 1].close : p.close;
+      return {
+        date: p.date,
+        close: p.close,
+        cumReturn: p.cumReturn,
+        volume: p.volume,
+        volumeUp: p.close >= prevClose,
+      };
+    });
   }, [data.points]);
 
   const isPositive = data.totalReturn >= 0;
@@ -77,10 +90,10 @@ function PriceChart({ data, symbol }: { data: TickerHistoryResponse; symbol: str
         </div>
       </div>
 
-      {/* Chart */}
-      <div className="w-full h-[400px]">
+      {/* Price chart */}
+      <div className="w-full h-[320px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 30, bottom: 10, left: 10 }}>
+          <ComposedChart data={chartData} margin={{ top: 10, right: 30, bottom: 0, left: 10 }}>
             <defs>
               <linearGradient id="returnGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={isPositive ? '#10b981' : '#f43f5e'} stopOpacity={0.15} />
@@ -90,17 +103,7 @@ function PriceChart({ data, symbol }: { data: TickerHistoryResponse; symbol: str
 
             <CartesianGrid strokeDasharray="4 4" stroke="var(--color-border-subtle)" vertical={false} />
 
-            <XAxis
-              dataKey="date"
-              tickFormatter={(v: string) => {
-                const d = new Date(v);
-                return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-              }}
-              tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--color-text-muted)' }}
-              axisLine={{ stroke: 'var(--color-border-subtle)' }}
-              tickLine={false}
-              minTickGap={40}
-            />
+            <XAxis dataKey="date" hide />
 
             <YAxis
               yAxisId="price"
@@ -139,6 +142,9 @@ function PriceChart({ data, symbol }: { data: TickerHistoryResponse; symbol: str
                     <div className={`text-[12px] font-mono font-medium ${d.cumReturn >= 0 ? 'text-emerald' : 'text-rose'}`}>
                       {formatPct(d.cumReturn)}
                     </div>
+                    <div className="text-[11px] font-mono text-text-muted mt-0.5">
+                      Vol: {formatVolume(d.volume)}
+                    </div>
                   </div>
                 );
               }}
@@ -165,6 +171,51 @@ function PriceChart({ data, symbol }: { data: TickerHistoryResponse; symbol: str
         </ResponsiveContainer>
       </div>
 
+      {/* Volume chart */}
+      <div className="w-full h-[100px] -mt-1">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={chartData} margin={{ top: 0, right: 30, bottom: 10, left: 10 }}>
+            <XAxis
+              dataKey="date"
+              tickFormatter={(v: string) => {
+                const d = new Date(v);
+                return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+              }}
+              tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--color-text-muted)' }}
+              axisLine={{ stroke: 'var(--color-border-subtle)' }}
+              tickLine={false}
+              minTickGap={40}
+            />
+
+            <YAxis
+              orientation="right"
+              tickFormatter={formatVolume}
+              tick={{ fontSize: 9, fontFamily: 'var(--font-mono)', fill: 'var(--color-text-muted)' }}
+              axisLine={false}
+              tickLine={false}
+              width={60}
+            />
+
+            <YAxis
+              yAxisId="spacer"
+              orientation="left"
+              width={55}
+              tick={false}
+              axisLine={false}
+              tickLine={false}
+            />
+
+            <Bar
+              dataKey="volume"
+              fill="#3b82f6"
+              opacity={0.4}
+              radius={[1, 1, 0, 0]}
+              isAnimationActive={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
       {/* Legend */}
       <div className="flex items-center gap-5 flex-wrap">
         <div className="flex items-center gap-1.5">
@@ -174,6 +225,10 @@ function PriceChart({ data, symbol }: { data: TickerHistoryResponse; symbol: str
         <div className="flex items-center gap-1.5">
           <div className={`w-3 h-3 rounded-sm ${isPositive ? 'bg-emerald' : 'bg-rose'} opacity-15`} />
           <span className="text-[10px] text-text-tertiary">Cumulative Return</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-sm bg-accent opacity-40" />
+          <span className="text-[10px] text-text-tertiary">Volume</span>
         </div>
       </div>
     </div>
@@ -402,6 +457,21 @@ export default function StockPage() {
               </div>
             </div>
           )}
+
+          {/* OI Distribution */}
+          <div className="glass-bright rounded-xl overflow-hidden mt-6">
+            <div className="px-5 py-3 border-b border-border-subtle">
+              <h2 className="text-[14px] font-semibold text-text-primary">
+                {symbol} — Options Open Interest
+              </h2>
+              <p className="text-[11px] text-text-tertiary mt-0.5">
+                Call and put positioning by strike — see where the market is concentrated
+              </p>
+            </div>
+            <div className="p-4">
+              <OIDistributionChart symbol={symbol} />
+            </div>
+          </div>
         </div>
       </main>
     </div>

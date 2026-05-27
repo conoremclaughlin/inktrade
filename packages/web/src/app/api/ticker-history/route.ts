@@ -56,7 +56,8 @@ export async function GET(request: NextRequest) {
       const dd = ((peak - close) / peak) * 100;
       if (dd > maxDrawdownPct) maxDrawdownPct = dd;
 
-      return { date, close, cumReturn };
+      const volume = Number(q.volume ?? 0);
+      return { date, close, cumReturn, volume };
     });
 
     const totalReturn = points[points.length - 1]?.cumReturn ?? 0;

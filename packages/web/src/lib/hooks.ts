@@ -216,6 +216,7 @@ export interface TickerHistoryPoint {
   date: string;
   close: number;
   cumReturn: number;
+  volume: number;
 }
 
 export interface TickerHistoryResponse {
@@ -236,6 +237,40 @@ export function useTickerHistory(symbol: string | null, period: string = '1y') {
 }
 
 // --- Portfolio analysis ---
+
+// --- OI distribution ---
+
+export interface OIStrike {
+  strike: number;
+  callOI: number;
+  putOI: number;
+  callVolume: number;
+  putVolume: number;
+}
+
+export interface OIDistribution {
+  symbol: string;
+  underlyingPrice: number;
+  expirations: string[];
+  strikes: OIStrike[];
+  maxPainStrike: number;
+  totalCallOI: number;
+  totalPutOI: number;
+  pcRatio: number;
+}
+
+export function useOIDistribution(symbol: string | null, expiry?: string) {
+  const qs = new URLSearchParams();
+  if (symbol) qs.set('symbol', symbol);
+  if (expiry) qs.set('expiry', expiry);
+
+  return useQuery<OIDistribution>({
+    queryKey: ['oi-distribution', symbol, expiry],
+    queryFn: () => fetchJson(`/api/oi-distribution?${qs}`),
+    enabled: !!symbol,
+    staleTime: 60_000,
+  });
+}
 
 // --- Schwab auth ---
 
