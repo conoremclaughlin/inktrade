@@ -24,5 +24,8 @@
   "devDependencies": {
     "prettier": "^3.8.1"
   },
-  "packageManager": "yarn@4.13.0"
+  "packageManager": "yarn@4.13.0",
+  "resolutions": {
+    "postcss": "^8.5.14"
+  }
 }
