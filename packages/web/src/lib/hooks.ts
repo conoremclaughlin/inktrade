@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   Quote,
   OptionChain,
@@ -232,6 +232,55 @@ export function useTickerHistory(symbol: string | null, period: string = '1y') {
     queryKey: ['ticker-history', symbol, period],
     queryFn: () => fetchJson(`/api/ticker-history?symbol=${symbol}&period=${period}`),
     enabled: !!symbol,
+  });
+}
+
+// --- Portfolio analysis ---
+
+// --- Schwab auth ---
+
+export interface SchwabStatus {
+  status: 'unconfigured' | 'disconnected' | 'expired' | 'connected' | 'configured';
+  message?: string;
+  authUrl?: string;
+  provider?: string;
+  tokenExpiresAt?: number;
+  refreshExpiresAt?: number;
+}
+
+export function useSchwabStatus() {
+  return useQuery<SchwabStatus>({
+    queryKey: ['schwab-status'],
+    queryFn: () => fetchJson('/api/auth/schwab'),
+    staleTime: 30_000,
+  });
+}
+
+export function useSchwabConfigure() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (creds: { appKey: string; appSecret: string; redirectUri?: string }) => {
+      const res = await fetch('/api/auth/schwab', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(creds),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      return res.json() as Promise<SchwabStatus>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['schwab-status'] }),
+  });
+}
+
+export function useSchwabDisconnect() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/auth/schwab', { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to disconnect');
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['schwab-status'] }),
   });
 }
 

@@ -69,16 +69,10 @@ export function Navbar() {
             Strategies
           </a>
           <a
-            href="#pricing"
+            href="/settings"
             className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
           >
-            Pricing
-          </a>
-          <a
-            href="https://docs.inktrade.com"
-            className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
-          >
-            Docs
+            Settings
           </a>
         </div>
 

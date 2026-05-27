@@ -26,6 +26,14 @@
     "./math": {
       "types": "./dist/math.d.ts",
       "import": "./dist/math.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./services": {
+      "types": "./dist/services/index.d.ts",
+      "import": "./dist/services/index.js"
     }
   },
   "scripts": {
