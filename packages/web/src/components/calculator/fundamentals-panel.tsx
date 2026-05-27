@@ -245,7 +245,7 @@ export function FundamentalsPanel({
 
         <div className="glass rounded-lg px-3 py-2.5">
           <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
-            Current FY P/E
+            Forward P/E
           </div>
           <div className="text-[16px] font-mono font-bold text-accent-bright">
             {data.currentFyPe ? `${data.currentFyPe.toFixed(1)}x` : '—'}
@@ -316,7 +316,7 @@ export function FundamentalsPanel({
             <><span className="font-mono font-medium text-[#f59e0b]">Run-Rate {runRatePe.toFixed(1)}x</span> — latest quarter&apos;s net income annualized (×4) at {latestNetMarginPct.toFixed(1)}% net margin → ${runRateEps.toFixed(2)} EPS. What you&apos;re paying if current profitability holds. </>
           )}
           {data.currentFyPe !== null && (
-            <><span className="font-mono font-medium text-accent-bright">Current FY {data.currentFyPe.toFixed(1)}x</span> — analyst consensus for the current fiscal year (${data.currentFyEps.toFixed(2)} EPS{data.currentFyGrowth != null ? `, +${(data.currentFyGrowth * 100).toFixed(0)}% YoY` : ''}). This is what most platforms call &quot;forward P/E.&quot; </>
+            <><span className="font-mono font-medium text-accent-bright">Forward {data.currentFyPe.toFixed(1)}x</span> — analyst consensus for the current fiscal year (${data.currentFyEps.toFixed(2)} EPS{data.currentFyGrowth != null ? `, +${(data.currentFyGrowth * 100).toFixed(0)}% YoY` : ''}).</>
           )}
           {data.nextFyPe !== null && (
             <><span className="font-mono font-medium text-[#a78bfa]">Next FY {data.nextFyPe.toFixed(1)}x</span> — analyst consensus for the following fiscal year (${data.nextFyEps.toFixed(2)} EPS{data.nextFyGrowth != null ? `, +${(data.nextFyGrowth * 100).toFixed(0)}% growth` : ''}). Further out and less certain.</>
@@ -325,14 +325,14 @@ export function FundamentalsPanel({
         {data.currentFyPe !== null && runRatePe !== null && Math.abs(data.currentFyPe - runRatePe) > 0.5 && (
           <p className="text-[12px] text-text-secondary leading-relaxed mt-1.5">
             {data.currentFyPe < runRatePe
-              ? `Current FY P/E is ${(runRatePe - data.currentFyPe).toFixed(1)}x lower than run-rate — analysts expect earnings to grow beyond the latest quarter's pace.`
-              : `Current FY P/E is ${(data.currentFyPe - runRatePe).toFixed(1)}x higher than run-rate — analysts expect margins or revenue to pull back from the latest quarter.`
+              ? `Forward P/E is ${(runRatePe - data.currentFyPe).toFixed(1)}x lower than run-rate — analysts expect earnings to grow beyond the latest quarter's pace.`
+              : `Forward P/E is ${(data.currentFyPe - runRatePe).toFixed(1)}x higher than run-rate — analysts expect margins or revenue to pull back from the latest quarter.`
             }
           </p>
         )}
         {targetCurrentFyPe !== null && runRateEps > 0 && (
           <p className="text-[12px] text-text-secondary leading-relaxed mt-1.5">
-            At ${targetPrice?.toFixed(0)} target: current FY P/E <span className="font-mono font-medium text-text-primary">{targetCurrentFyPe.toFixed(1)}x</span>, run-rate P/E <span className="font-mono font-medium text-text-primary">{(targetPrice! / runRateEps).toFixed(1)}x</span>
+            At ${targetPrice?.toFixed(0)} target: forward P/E <span className="font-mono font-medium text-text-primary">{targetCurrentFyPe.toFixed(1)}x</span>, run-rate P/E <span className="font-mono font-medium text-text-primary">{(targetPrice! / runRateEps).toFixed(1)}x</span>
             {targetNextFyPe !== null && <>, next FY P/E <span className="font-mono font-medium text-text-primary">{targetNextFyPe.toFixed(1)}x</span></>}.
           </p>
         )}

@@ -115,7 +115,7 @@ export function analyzeTargetTimeline(params: TimelineParams): TimelineAnalysis 
 
       const netPnl = optionValueAtTarget - capitalDeployed;
       const returnPct = capitalDeployed > 0 ? (netPnl / capitalDeployed) * 100 : -100;
-      const netLeverage = stockReturnPct !== 0 ? returnPct / stockReturnPct : 0;
+      const netLeverage = stockReturnPct !== 0 ? returnPct / Math.abs(stockReturnPct) : 0;
 
       timeline.push({
         daysFromNow: days,

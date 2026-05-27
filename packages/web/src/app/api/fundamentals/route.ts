@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
         module: 'all',
       }),
       yf.quoteSummary(symbol, {
-        modules: ['defaultKeyStatistics', 'price', 'calendarEvents', 'earningsTrend'],
+        modules: ['defaultKeyStatistics', 'summaryDetail', 'price', 'calendarEvents', 'earningsTrend'],
       }),
     ]);
 
@@ -79,8 +79,9 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime())
       .slice(-6);
 
-    const trailingPe = trailingEps > 0 ? currentPrice / trailingEps : null;
-    const currentFyPe = currentFyEps > 0 ? currentPrice / currentFyEps : null;
+    const trailingPe = summary.summaryDetail?.trailingPE ?? (trailingEps > 0 ? currentPrice / trailingEps : null);
+    const forwardPe = summary.summaryDetail?.forwardPE ?? (currentFyEps > 0 ? currentPrice / currentFyEps : null);
+    const forwardEps = summary.defaultKeyStatistics?.forwardEps ?? currentFyEps;
     const nextFyPe = nextFyEps > 0 ? currentPrice / nextFyEps : null;
 
     const earnings = {
@@ -110,10 +111,10 @@ export async function GET(request: NextRequest) {
       sharesOutstanding,
       marketCap,
       trailingEps,
-      currentFyEps,
+      currentFyEps: forwardEps,
       nextFyEps,
       trailingPe,
-      currentFyPe,
+      currentFyPe: forwardPe,
       nextFyPe,
       currentFyGrowth: currentFyTrend?.earningsEstimate?.growth ?? null,
       nextFyGrowth: nextFyTrend?.earningsEstimate?.growth ?? null,

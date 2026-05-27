@@ -177,7 +177,7 @@ describe('analyzeTargetTimeline', () => {
       expect(point.returnPct).toBeCloseTo(expectedReturn, 10);
     });
 
-    it('leverage = returnPct / stockReturnPct', () => {
+    it('leverage = returnPct / abs(stockReturnPct)', () => {
       const result = analyzeTargetTimeline({
         ...BASE,
         targetPrice: 120,
@@ -186,11 +186,11 @@ describe('analyzeTargetTimeline', () => {
         timelineDays: [30],
       });
       const point = result.strategies[0].timeline[0];
-      const expectedLeverage = point.returnPct / result.stockReturnPct;
+      const expectedLeverage = point.returnPct / Math.abs(result.stockReturnPct);
       expect(point.netLeverage).toBeCloseTo(expectedLeverage, 10);
     });
 
-    it('leverage interpretation: 5x means option return = 5 × stock return', () => {
+    it('leverage interpretation: 5x means option return = 5 × stock move magnitude', () => {
       const result = analyzeTargetTimeline({
         ...BASE,
         targetPrice: 110,
@@ -199,8 +199,24 @@ describe('analyzeTargetTimeline', () => {
         timelineDays: [30],
       });
       const point = result.strategies[0].timeline[0];
-      const impliedOptionReturn = point.netLeverage * result.stockReturnPct;
+      const impliedOptionReturn = point.netLeverage * Math.abs(result.stockReturnPct);
       expect(impliedOptionReturn).toBeCloseTo(point.returnPct, 6);
+    });
+
+    it('profitable put has positive leverage', () => {
+      const result = analyzeTargetTimeline({
+        ...BASE,
+        targetPrice: 90,
+        strike: 100,
+        optionType: 'put',
+        entryDtes: [90],
+        rollAtDte: 30,
+        timelineDays: [30],
+      });
+      const point = result.strategies[0].timeline[0];
+      expect(result.stockReturnPct).toBeLessThan(0);
+      expect(point.returnPct).toBeGreaterThan(0);
+      expect(point.netLeverage).toBeGreaterThan(0);
     });
 
     it('ATM call with 10% move: leverage is roughly delta × S/premium', () => {
@@ -359,8 +375,8 @@ describe('analyzeTargetTimeline', () => {
       for (const strat of result.strategies) {
         for (const point of strat.timeline) {
           if (!point.reachable) continue;
-          // Verify: leverage × stockReturn ≈ optionReturn
-          const implied = point.netLeverage * result.stockReturnPct;
+          // Verify: leverage × abs(stockReturn) ≈ optionReturn
+          const implied = point.netLeverage * Math.abs(result.stockReturnPct);
           expect(implied).toBeCloseTo(point.returnPct, 6);
           // Verify: return = (value - capital) / capital × 100
           const computedReturn =
