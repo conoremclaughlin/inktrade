@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start -p 6001",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@inktrade/engine": "workspace:^",
