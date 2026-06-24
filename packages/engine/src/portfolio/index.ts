@@ -31,3 +31,11 @@ export type {
 } from './theta-grid.js';
 
 export { computeThetaGrid } from './theta-grid.js';
+
+export type {
+  SpreadProjectionParams,
+  ProjectionDay,
+  SpreadProjection,
+} from './theta-projection.js';
+
+export { computeSpreadProjection } from './theta-projection.js';

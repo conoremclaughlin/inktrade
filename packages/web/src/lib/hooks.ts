@@ -12,7 +12,7 @@ import type {
   LetfHoldingsData,
   LetfHistoryPoint,
 } from '@inktrade/engine/letf';
-import type { PortfolioAnalysis } from '@inktrade/engine/portfolio';
+import type { PortfolioAnalysis, SpreadProjection } from '@inktrade/engine/portfolio';
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -97,6 +97,8 @@ export function useVolatility(symbol: string | null) {
 
 export interface FundamentalsData {
   symbol: string;
+  financialCurrency: string;
+  exchangeRateToUSD: number | null;
   sharesOutstanding: number;
   marketCap: number;
   trailingEps: number;
@@ -320,6 +322,37 @@ export function useSchwabDisconnect() {
 }
 
 // --- Portfolio analysis ---
+
+// --- Theta projection ---
+
+export interface ThetaProjectionParams {
+  shortStrike: number;
+  longStrike: number;
+  spotPrice: number;
+  iv: number;
+  currentDte: number;
+  netCreditReceived: number;
+  contracts?: number;
+}
+
+export function useThetaProjection(params: ThetaProjectionParams | null) {
+  const qs = new URLSearchParams();
+  if (params) {
+    qs.set('shortStrike', String(params.shortStrike));
+    qs.set('longStrike', String(params.longStrike));
+    qs.set('spotPrice', String(params.spotPrice));
+    qs.set('iv', String(params.iv));
+    qs.set('currentDte', String(params.currentDte));
+    qs.set('netCreditReceived', String(params.netCreditReceived));
+    if (params.contracts) qs.set('contracts', String(params.contracts));
+  }
+
+  return useQuery<SpreadProjection>({
+    queryKey: ['theta-projection', params],
+    queryFn: () => fetchJson(`/api/theta-projection?${qs}`),
+    enabled: !!params,
+  });
+}
 
 export function usePortfolioAnalysis(symbols: string[], lookback: string = '1y') {
   const sorted = [...symbols].sort().join(',');

@@ -15,6 +15,7 @@ import {
 import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/navbar';
 import { OIDistributionChart } from '@/components/stock/oi-chart';
+import { ThetaDecayChart } from '@/components/stock/theta-decay-chart';
 import { useQuote, useTickerHistory, type TickerHistoryResponse } from '@/lib/hooks';
 
 const PERIODS = ['1M', '3M', '6M', '1Y', '2Y', '5Y'] as const;
@@ -454,6 +455,23 @@ export default function StockPage() {
                 <div className="text-[18px] font-mono font-bold text-text-primary">
                   {history.data.points.length}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Theta Decay Projection */}
+          {quote.data && (
+            <div className="glass-bright rounded-xl overflow-hidden mt-6">
+              <div className="px-5 py-3 border-b border-border-subtle">
+                <h2 className="text-[14px] font-semibold text-text-primary">
+                  {symbol} — Credit Spread Theta Decay
+                </h2>
+                <p className="text-[11px] text-text-tertiary mt-0.5">
+                  Close or hold? Project daily theta gain vs gamma risk through expiration
+                </p>
+              </div>
+              <div className="p-4">
+                <ThetaDecayChart spotPrice={quote.data.price} />
               </div>
             </div>
           )}
