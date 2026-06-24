@@ -45,6 +45,12 @@ export function Navbar() {
             Features
           </a>
           <a
+            href="/watchlist"
+            className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
+          >
+            Watchlist
+          </a>
+          <a
             href="/calculator"
             className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
           >

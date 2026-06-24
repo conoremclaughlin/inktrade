@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   Quote,
@@ -351,6 +352,78 @@ export function useThetaProjection(params: ThetaProjectionParams | null) {
     queryKey: ['theta-projection', params],
     queryFn: () => fetchJson(`/api/theta-projection?${qs}`),
     enabled: !!params,
+  });
+}
+
+// --- Watchlist ---
+
+const WATCHLIST_KEY = 'inktrade:watchlist';
+
+const DEFAULT_WATCHLIST = [
+  'SPY', 'QQQ', 'IWM', 'VIX',
+  'NVDA', 'AMD', 'AVGO', 'TSM',
+  'AAPL', 'GOOG', 'AMZN', 'MSFT', 'TSLA',
+  'SOXL', 'NFLX', 'NET',
+];
+
+function loadWatchlist(): string[] {
+  if (typeof window === 'undefined') return DEFAULT_WATCHLIST;
+  try {
+    const stored = localStorage.getItem(WATCHLIST_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch { /* ignore */ }
+  return DEFAULT_WATCHLIST;
+}
+
+function saveWatchlist(symbols: string[]) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(WATCHLIST_KEY, JSON.stringify(symbols));
+}
+
+export function useWatchlistSymbols() {
+  const [symbols, setSymbolsRaw] = useState<string[]>(loadWatchlist);
+
+  const setSymbols = useCallback((next: string[] | ((prev: string[]) => string[])) => {
+    setSymbolsRaw((prev) => {
+      const resolved = typeof next === 'function' ? next(prev) : next;
+      saveWatchlist(resolved);
+      return resolved;
+    });
+  }, []);
+
+  const addSymbol = useCallback((sym: string) => {
+    const upper = sym.toUpperCase().trim();
+    if (!upper) return;
+    setSymbols((prev) => prev.includes(upper) ? prev : [...prev, upper]);
+  }, [setSymbols]);
+
+  const removeSymbol = useCallback((sym: string) => {
+    setSymbols((prev) => prev.filter((s) => s !== sym.toUpperCase()));
+  }, [setSymbols]);
+
+  const moveSymbol = useCallback((from: number, to: number) => {
+    setSymbols((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+  }, [setSymbols]);
+
+  return { symbols, setSymbols, addSymbol, removeSymbol, moveSymbol };
+}
+
+export function useWatchlistQuotes(symbols: string[]) {
+  const joined = symbols.join(',');
+  return useQuery<{ quotes: Quote[] }>({
+    queryKey: ['watchlist-quotes', joined],
+    queryFn: () => fetchJson(`/api/quotes?symbols=${joined}`),
+    enabled: symbols.length > 0,
+    refetchInterval: 30_000,
+    staleTime: 10_000,
   });
 }
 
