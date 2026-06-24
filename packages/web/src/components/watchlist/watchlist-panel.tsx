@@ -113,10 +113,13 @@ export function WatchlistPanel({ activeSymbol, onSymbolClick }: WatchlistPanelPr
                 : 'text-text-muted';
 
               return (
-                <button
+                <div
                   key={sym}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSymbolClick(sym)}
-                  className={`w-full flex items-center justify-between px-3 py-1.5 text-left transition-colors group ${
+                  onKeyDown={(e) => { if (e.key === 'Enter') onSymbolClick(sym); }}
+                  className={`relative w-full flex items-center justify-between px-3 py-1.5 text-left transition-colors group cursor-pointer ${
                     isActive
                       ? 'bg-accent/10 border-l-2 border-accent'
                       : 'hover:bg-bg-secondary/60 border-l-2 border-transparent'
@@ -143,7 +146,6 @@ export function WatchlistPanel({ activeSymbol, onSymbolClick }: WatchlistPanelPr
                       <div className="text-[10px] font-mono text-text-muted">...</div>
                     )}
                   </div>
-                  {/* Remove button on hover */}
                   <button
                     onClick={(e) => { e.stopPropagation(); removeSymbol(sym); }}
                     className="absolute right-1 opacity-0 group-hover:opacity-60 hover:!opacity-100 text-text-muted hover:text-rose text-[10px] p-0.5 transition-opacity"
@@ -151,7 +153,7 @@ export function WatchlistPanel({ activeSymbol, onSymbolClick }: WatchlistPanelPr
                   >
                     ×
                   </button>
-                </button>
+                </div>
               );
             })}
           </div>
