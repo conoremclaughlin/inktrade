@@ -502,6 +502,7 @@ __metadata:
     "@types/react": "npm:^19.2.0"
     "@types/react-dom": "npm:^19.2.0"
     "@types/react-is": "npm:^19"
+    lightweight-charts: "npm:^5.2.0"
     next: "npm:^16.2.3"
     postcss: "npm:^8.5.0"
     react: "npm:^19.2.0"
@@ -1578,6 +1579,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"fancy-canvas@npm:2.1.0":
+  version: 2.1.0
+  resolution: "fancy-canvas@npm:2.1.0"
+  checksum: 10/b23f666446b0a77054f047e282a4186444d65482d97824ebfbd7ae2bf5b41700de1f449226d6b4a6161eddd6dbb1fd75c4f815d92ee49d59e0654a2d4a63451a
+  languageName: node
+  linkType: hard
+
 "fdir@npm:^6.5.0":
   version: 6.5.0
   resolution: "fdir@npm:6.5.0"
@@ -1848,6 +1856,15 @@ __metadata:
     lightningcss-win32-x64-msvc:
       optional: true
   checksum: 10/098e61007f0d0ec8b5c50884e33b543b551d1ff21bc7b062434b6638fd0b8596858f823b60dfc2a4aa756f3cb120ad79f2b7f4a55b1bda2c0269ab8cf476f114
+  languageName: node
+  linkType: hard
+
+"lightweight-charts@npm:^5.2.0":
+  version: 5.2.0
+  resolution: "lightweight-charts@npm:5.2.0"
+  dependencies:
+    fancy-canvas: "npm:2.1.0"
+  checksum: 10/108d0142e408cc1cf4d249dfbe913e0eb4dfe3ebf38fe550e514c6b9970fbf93431fb1799b570b2da6a4f51b6b223ffba5fc29b1855fece93d819b79b763b2d6
   languageName: node
   linkType: hard
 

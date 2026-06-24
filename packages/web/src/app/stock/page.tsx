@@ -1,22 +1,12 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
-import {
-  ResponsiveContainer,
-  ComposedChart,
-  Area,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Bar,
-} from 'recharts';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/navbar';
+import { TradingChart } from '@/components/stock/trading-chart';
 import { OIDistributionChart } from '@/components/stock/oi-chart';
 import { ThetaDecayChart } from '@/components/stock/theta-decay-chart';
-import { useQuote, useTickerHistory, type TickerHistoryResponse } from '@/lib/hooks';
+import { useQuote, useTickerHistory } from '@/lib/hooks';
 
 const PERIODS = ['1M', '3M', '6M', '1Y', '2Y', '5Y'] as const;
 const PERIOD_MAP: Record<string, string> = {
@@ -36,204 +26,6 @@ const POPULAR = [
 
 function formatPct(n: number): string {
   return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
-}
-
-function formatLargeNumber(n: number): string {
-  const abs = Math.abs(n);
-  if (abs >= 1e12) return `$${(n / 1e12).toFixed(1)}T`;
-  if (abs >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
-  if (abs >= 1e6) return `$${(n / 1e6).toFixed(0)}M`;
-  return `$${n.toLocaleString()}`;
-}
-
-function formatVolume(n: number): string {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`;
-  return String(n);
-}
-
-function PriceChart({ data, symbol }: { data: TickerHistoryResponse; symbol: string }) {
-  const chartData = useMemo(() => {
-    return data.points.map((p, i) => {
-      const prevClose = i > 0 ? data.points[i - 1].close : p.close;
-      return {
-        date: p.date,
-        close: p.close,
-        cumReturn: p.cumReturn,
-        volume: p.volume,
-        volumeUp: p.close >= prevClose,
-      };
-    });
-  }, [data.points]);
-
-  const isPositive = data.totalReturn >= 0;
-
-  return (
-    <div className="space-y-4">
-      {/* Return stats */}
-      <div className="flex items-center gap-6 flex-wrap text-[12px] font-mono">
-        <div className="flex items-center gap-1.5">
-          <span className="text-text-muted">Return:</span>
-          <span className={`font-medium ${isPositive ? 'text-emerald' : 'text-rose'}`}>
-            {formatPct(data.totalReturn)}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-text-muted">Annualized:</span>
-          <span className={`font-medium ${data.annualizedReturn >= 0 ? 'text-emerald' : 'text-rose'}`}>
-            {formatPct(data.annualizedReturn)}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-text-muted">Max Drawdown:</span>
-          <span className="font-medium text-rose">-{data.maxDrawdownPct.toFixed(1)}%</span>
-        </div>
-      </div>
-
-      {/* Price chart */}
-      <div className="w-full h-[320px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 30, bottom: 0, left: 10 }}>
-            <defs>
-              <linearGradient id="returnGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={isPositive ? '#10b981' : '#f43f5e'} stopOpacity={0.15} />
-                <stop offset="100%" stopColor={isPositive ? '#10b981' : '#f43f5e'} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-
-            <CartesianGrid strokeDasharray="4 4" stroke="var(--color-border-subtle)" vertical={false} />
-
-            <XAxis dataKey="date" hide />
-
-            <YAxis
-              yAxisId="price"
-              orientation="right"
-              tickFormatter={(v: number) => `$${v.toFixed(0)}`}
-              tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--color-text-muted)' }}
-              axisLine={false}
-              tickLine={false}
-              width={60}
-            />
-
-            <YAxis
-              yAxisId="return"
-              orientation="left"
-              tickFormatter={(v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(0)}%`}
-              tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--color-text-muted)' }}
-              axisLine={false}
-              tickLine={false}
-              width={55}
-            />
-
-            <Tooltip
-              content={({ active, payload }) => {
-                if (!active || !payload?.length) return null;
-                const d = payload[0]?.payload as (typeof chartData)[0];
-                if (!d) return null;
-                const dateStr = new Date(d.date).toLocaleDateString('en-US', {
-                  month: 'short', day: 'numeric', year: 'numeric',
-                });
-                return (
-                  <div className="bg-[#0f1629]/95 backdrop-blur-md rounded-lg px-3 py-2 shadow-xl border border-border-subtle">
-                    <div className="text-[10px] font-mono text-text-secondary mb-1">{dateStr}</div>
-                    <div className="text-[12px] font-mono text-text-primary font-medium">
-                      {symbol}: ${d.close.toFixed(2)}
-                    </div>
-                    <div className={`text-[12px] font-mono font-medium ${d.cumReturn >= 0 ? 'text-emerald' : 'text-rose'}`}>
-                      {formatPct(d.cumReturn)}
-                    </div>
-                    <div className="text-[11px] font-mono text-text-muted mt-0.5">
-                      Vol: {formatVolume(d.volume)}
-                    </div>
-                  </div>
-                );
-              }}
-            />
-
-            <Area
-              yAxisId="return"
-              type="monotone"
-              dataKey="cumReturn"
-              stroke="none"
-              fill="url(#returnGrad)"
-              fillOpacity={1}
-            />
-
-            <Line
-              yAxisId="price"
-              type="monotone"
-              dataKey="close"
-              stroke={isPositive ? '#10b981' : '#f43f5e'}
-              strokeWidth={2}
-              dot={false}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Volume chart */}
-      <div className="w-full h-[100px] -mt-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 0, right: 30, bottom: 10, left: 10 }}>
-            <XAxis
-              dataKey="date"
-              tickFormatter={(v: string) => {
-                const d = new Date(v);
-                return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-              }}
-              tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--color-text-muted)' }}
-              axisLine={{ stroke: 'var(--color-border-subtle)' }}
-              tickLine={false}
-              minTickGap={40}
-            />
-
-            <YAxis
-              orientation="right"
-              tickFormatter={formatVolume}
-              tick={{ fontSize: 9, fontFamily: 'var(--font-mono)', fill: 'var(--color-text-muted)' }}
-              axisLine={false}
-              tickLine={false}
-              width={60}
-            />
-
-            <YAxis
-              yAxisId="spacer"
-              orientation="left"
-              width={55}
-              tick={false}
-              axisLine={false}
-              tickLine={false}
-            />
-
-            <Bar
-              dataKey="volume"
-              fill="#3b82f6"
-              opacity={0.4}
-              radius={[1, 1, 0, 0]}
-              isAnimationActive={false}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Legend */}
-      <div className="flex items-center gap-5 flex-wrap">
-        <div className="flex items-center gap-1.5">
-          <div className={`w-4 h-0.5 rounded-full ${isPositive ? 'bg-emerald' : 'bg-rose'}`} />
-          <span className="text-[10px] text-text-tertiary">Price</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className={`w-3 h-3 rounded-sm ${isPositive ? 'bg-emerald' : 'bg-rose'} opacity-15`} />
-          <span className="text-[10px] text-text-tertiary">Cumulative Return</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-accent opacity-40" />
-          <span className="text-[10px] text-text-tertiary">Volume</span>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export default function StockPage() {
@@ -378,7 +170,7 @@ export default function StockPage() {
             </div>
             <div className="p-4">
               {history.data ? (
-                <PriceChart data={history.data} symbol={symbol} />
+                <TradingChart data={history.data} symbol={symbol} height={500} />
               ) : history.isLoading ? (
                 <div className="flex items-center justify-center h-[400px]">
                   <div className="text-center">

@@ -49,6 +49,9 @@ export async function GET(request: NextRequest) {
         q.date instanceof Date
           ? q.date.toISOString().slice(0, 10)
           : String(q.date).slice(0, 10);
+      const open = q.open ?? q.close!;
+      const high = q.high ?? q.close!;
+      const low = q.low ?? q.close!;
       const close = q.close!;
       const cumReturn = ((close / baseClose) - 1) * 100;
 
@@ -57,7 +60,7 @@ export async function GET(request: NextRequest) {
       if (dd > maxDrawdownPct) maxDrawdownPct = dd;
 
       const volume = Number(q.volume ?? 0);
-      return { date, close, cumReturn, volume };
+      return { date, open, high, low, close, cumReturn, volume };
     });
 
     const totalReturn = points[points.length - 1]?.cumReturn ?? 0;

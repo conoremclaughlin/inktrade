@@ -217,6 +217,9 @@ export function useLetfHistory(symbol: string | null, period: string = '1y') {
 
 export interface TickerHistoryPoint {
   date: string;
+  open: number;
+  high: number;
+  low: number;
   close: number;
   cumReturn: number;
   volume: number;
