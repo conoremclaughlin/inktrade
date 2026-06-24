@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { analyzeTargetTimeline, type TimelineResult } from '@inktrade/engine/rolling';
+import { analyzeTargetTimeline, type TimelineResult, type RollMode } from '@inktrade/engine/rolling';
 
 interface StrategyTimelineProps {
   spotPrice: number;
@@ -61,6 +61,7 @@ export function StrategyTimeline({
   optionType,
 }: StrategyTimelineProps) {
   const [rollAtDte, setRollAtDte] = useState(30);
+  const [rollMode, setRollMode] = useState<RollMode>('dte');
   const [hoveredCell, setHoveredCell] = useState<string | null>(null);
 
   const analysis = useMemo(() =>
@@ -71,8 +72,9 @@ export function StrategyTimeline({
       iv,
       optionType,
       rollAtDte,
+      rollMode,
     }),
-  [spotPrice, targetPrice, strike, iv, optionType, rollAtDte]);
+  [spotPrice, targetPrice, strike, iv, optionType, rollAtDte, rollMode]);
 
   const movePct = ((targetPrice - spotPrice) / spotPrice * 100).toFixed(1);
   const moveDir = targetPrice >= spotPrice ? 'above' : 'below';
@@ -82,9 +84,21 @@ export function StrategyTimeline({
       {/* Controls */}
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono font-semibold text-text-muted uppercase tracking-wider">
-            Roll at:
-          </span>
+          <div className="flex gap-1 glass rounded-lg p-0.5">
+            {(['dte', 'interval'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setRollMode(m)}
+                className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-medium transition-all ${
+                  rollMode === m
+                    ? 'bg-accent/15 text-accent-bright border border-accent/30'
+                    : 'text-text-muted hover:text-text-secondary'
+                }`}
+              >
+                {m === 'dte' ? 'At DTE' : 'Every Nd'}
+              </button>
+            ))}
+          </div>
           <div className="flex gap-1">
             {ROLL_OPTIONS.map(({ label, value }) => (
               <button
@@ -275,9 +289,13 @@ export function StrategyTimeline({
       <p className="text-[11px] text-text-tertiary leading-relaxed">
         Each cell shows your <span className="text-text-secondary">net return</span> and{' '}
         <span className="text-text-secondary">leverage vs stock</span> if ${targetPrice.toFixed(0)} is hit at that
-        time horizon. Returns account for rolling costs (selling at {rollAtDte}d remaining, rebuying at
-        the same DTE). Shorter-dated entries give explosive returns if the target arrives quickly, but lose
-        to theta if it takes longer. Longer-dated entries cost more upfront but survive delays without rolling.
+        time horizon. Returns account for rolling costs ({rollMode === 'dte'
+          ? `selling at ${rollAtDte}d to expiry, rebuying at the same DTE`
+          : `selling every ${rollAtDte}d and rebuying at the same DTE`
+        }). {rollMode === 'dte'
+          ? 'Shorter-dated entries roll more often (less time between roll triggers). Longer-dated entries hold longer before each roll.'
+          : 'All entries roll on the same cadence. Longer-dated entries retain more time value at each sell, so per-roll cost is lower.'
+        }
       </p>
     </div>
   );

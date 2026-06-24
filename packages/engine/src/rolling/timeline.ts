@@ -1,5 +1,7 @@
 import { blackScholesPrice, computeGreeks } from '../leverage.js';
 
+export type RollMode = 'dte' | 'interval';
+
 export interface TimelineParams {
   spotPrice: number;
   targetPrice: number;
@@ -9,6 +11,7 @@ export interface TimelineParams {
   riskFreeRate?: number;
   bidAskSpread?: number;
   rollAtDte?: number;
+  rollMode?: RollMode;
   entryDtes?: number[];
   timelineDays?: number[];
 }
@@ -22,6 +25,7 @@ export interface TimelineAnalysis {
   strategies: TimelineStrategy[];
   timelineDays: number[];
   rollAtDte: number;
+  rollMode: RollMode;
 }
 
 export interface TimelineStrategy {
@@ -59,6 +63,7 @@ export function analyzeTargetTimeline(params: TimelineParams): TimelineAnalysis 
     riskFreeRate = 0.045,
     bidAskSpread = 0.15,
     rollAtDte = 30,
+    rollMode = 'dte',
     entryDtes = DEFAULT_ENTRY_DTES,
     timelineDays = DEFAULT_TIMELINE_DAYS,
   } = params;
@@ -73,19 +78,31 @@ export function analyzeTargetTimeline(params: TimelineParams): TimelineAnalysis 
     const entryPrice = blackScholesPrice(spotPrice, strike, tEntry, riskFreeRate, iv, optionType);
     if (entryPrice < 0.01) continue;
 
-    const tRoll = rollAtDte / 365;
-    const rollValue = rollAtDte > 0
-      ? blackScholesPrice(spotPrice, strike, tRoll, riskFreeRate, iv, optionType)
-      : 0;
+    let holdingPeriod: number;
+    let rollValue: number;
+
+    if (rollMode === 'interval') {
+      holdingPeriod = rollAtDte;
+      const dteAtSell = entryDte - rollAtDte;
+      rollValue = dteAtSell > 0
+        ? blackScholesPrice(spotPrice, strike, dteAtSell / 365, riskFreeRate, iv, optionType)
+        : 0;
+    } else {
+      holdingPeriod = entryDte - rollAtDte;
+      rollValue = rollAtDte > 0
+        ? blackScholesPrice(spotPrice, strike, rollAtDte / 365, riskFreeRate, iv, optionType)
+        : 0;
+    }
+
     const costPerRoll = (entryPrice - rollValue) + bidAskSpread * 2;
 
     const greeks = computeGreeks(spotPrice, strike, tEntry, riskFreeRate, iv, optionType);
-    const holdingPeriod = entryDte - rollAtDte;
+
 
     const timeline: TimelineResult[] = [];
 
     for (const days of timelineDays) {
-      const rollsNeeded = Math.max(0, Math.ceil(days / holdingPeriod) - 1);
+      const rollsNeeded = Math.floor(days / holdingPeriod);
       const daysSinceLastRoll = days - rollsNeeded * holdingPeriod;
       const remainingDte = entryDte - daysSinceLastRoll;
 
@@ -150,5 +167,6 @@ export function analyzeTargetTimeline(params: TimelineParams): TimelineAnalysis 
     strategies,
     timelineDays,
     rollAtDte,
+    rollMode,
   };
 }
