@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Navbar } from '@/components/navbar';
+import { AppShell } from '@/components/app-shell';
 import { TradingChart } from '@/components/stock/trading-chart';
 import { OIDistributionChart } from '@/components/stock/oi-chart';
 import { ThetaDecayChart } from '@/components/stock/theta-decay-chart';
@@ -61,10 +61,8 @@ export default function StockPage() {
   };
 
   return (
-    <div className="min-h-screen bg-void">
-      <Navbar />
-
-      <main className="pt-24 pb-16 px-4 sm:px-6">
+    <AppShell activeSymbol={symbol} onSymbolClick={handleSubmit}>
+      <div className="pb-16 px-4 sm:px-6 pt-8">
         <div className="mx-auto max-w-[1200px]">
           {/* Header */}
           <div className="mb-8">
@@ -283,7 +281,7 @@ export default function StockPage() {
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Navbar } from '@/components/navbar';
+import { AppShell } from '@/components/app-shell';
 import { useLetfProfile, useLetfHoldings, useLetfHistory, useTickerHistory } from '@/lib/hooks';
 import { LetfMetadataCard } from '@/components/letf/letf-metadata-card';
 import { HoldingsTable } from '@/components/letf/holdings-table';
@@ -157,10 +157,8 @@ export default function LetfPage() {
   const leverageFactor = profile.data?.registry.leverageFactor ?? 3;
 
   return (
-    <div className="min-h-screen bg-void">
-      <Navbar />
-
-      <main className="pt-24 pb-16 px-4 sm:px-6">
+    <AppShell activeSymbol={symbol} onSymbolClick={handleSymbolChange}>
+      <div className="pb-16 px-4 sm:px-6 pt-8">
         <div className="mx-auto max-w-[1400px]">
           {/* Page header */}
           <div className="mb-8">
@@ -341,7 +339,7 @@ export default function LetfPage() {
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

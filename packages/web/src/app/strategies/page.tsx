@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Navbar } from '@/components/navbar';
+import { AppShell } from '@/components/app-shell';
 import { PortfolioInput } from '@/components/strategies/portfolio-input';
 import { TickerGrid } from '@/components/strategies/ticker-grid';
 import { CorrelationHeatmap } from '@/components/strategies/correlation-heatmap';
@@ -32,9 +32,8 @@ export default function StrategiesPage() {
   const { data, isLoading, error } = usePortfolioAnalysis(symbols);
 
   return (
-    <div className="min-h-screen bg-void">
-      <Navbar />
-      <main className="mx-auto max-w-[1400px] pt-24 pb-16 px-4 sm:px-6">
+    <AppShell onSymbolClick={(s) => setSymbols((prev) => prev.includes(s) ? prev : [...prev, s])}>
+      <div className="mx-auto max-w-[1400px] pb-16 px-4 sm:px-6 pt-8">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-3xl sm:text-4xl font-display font-bold tracking-tight text-text-primary">
@@ -134,7 +133,7 @@ export default function StrategiesPage() {
             )}
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

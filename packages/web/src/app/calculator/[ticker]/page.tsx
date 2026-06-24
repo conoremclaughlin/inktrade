@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, Suspense } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
-import { Navbar } from '@/components/navbar';
+import { AppShell } from '@/components/app-shell';
 import { useQuote, useChainGrid, useLeverage, useVolatility, useFundamentals } from '@/lib/hooks';
 import { LeverageChart } from '@/components/calculator/leverage-chart';
 import { LeverageHeatmap, type HeatmapMode } from '@/components/calculator/leverage-heatmap';
@@ -68,9 +68,8 @@ function LoadingBar() {
 
 function CalculatorLoading() {
   return (
-    <div className="min-h-screen bg-void">
-      <Navbar />
-      <main className="pt-24 pb-16 px-4 sm:px-6">
+    <AppShell showWatchlist={false}>
+      <div className="pb-16 px-4 sm:px-6 pt-8">
         <div className="mx-auto max-w-[1400px]">
           <div className="mb-8">
             <h1 className="font-display text-3xl md:text-4xl tracking-[-0.02em] text-text-primary">
@@ -84,8 +83,8 @@ function CalculatorLoading() {
             <LoadingBar />
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
 
@@ -206,10 +205,8 @@ function Calculator({ symbol }: { symbol: string }) {
   }, [quote.data]);
 
   return (
-    <div className="min-h-screen bg-void">
-      <Navbar />
-
-      <main className="pt-24 pb-16 px-4 sm:px-6">
+    <AppShell activeSymbol={symbol} onSymbolClick={(s) => router.push(`/calculator/${s}`)}>
+      <div className="pb-16 px-4 sm:px-6 pt-8">
         <div className="mx-auto max-w-[1400px]">
           {/* Page header */}
           <div className="mb-8 flex items-start justify-between">
@@ -713,10 +710,10 @@ function Calculator({ symbol }: { symbol: string }) {
               )}
           </div>
         </div>
-      </main>
+      </div>
 
       <GlossaryPanel open={glossaryOpen} onClose={() => setGlossaryOpen(false)} />
-    </div>
+    </AppShell>
   );
 }
 
