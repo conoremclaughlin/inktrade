@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { Quote } from '@inktrade/engine/math';
 import { useWatchlistSymbols, useWatchlistQuotes } from '@/lib/hooks';
+import { useUser } from '@/lib/hooks/use-auth';
 
 type SortKey = 'symbol' | 'price' | 'change' | 'changePct' | 'volume' | 'marketCap' | 'dayRange';
 type SortDir = 'asc' | 'desc';
@@ -59,6 +60,7 @@ function Sparkline({ changePct }: { changePct: number }) {
 }
 
 export function WatchlistTable() {
+  const { isAuthenticated, isLoading: authLoading } = useUser();
   const { symbols, addSymbol, removeSymbol, moveSymbol } = useWatchlistSymbols();
   const { data, isLoading, error } = useWatchlistQuotes(symbols);
   const [sortKey, setSortKey] = useState<SortKey>('symbol');
@@ -167,6 +169,22 @@ export function WatchlistTable() {
           <span className="ml-0.5">{sortDir === 'asc' ? '↑' : '↓'}</span>
         )}
       </button>
+    );
+  }
+
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <div className="glass-bright rounded-xl p-8 text-center">
+        <div className="text-[14px] text-text-secondary mb-4">
+          Sign in to track your positions and market movers
+        </div>
+        <a
+          href="/login"
+          className="inline-block px-5 py-2.5 rounded-lg bg-accent/15 text-accent-bright text-[13px] font-semibold border border-accent/30 hover:bg-accent/25 transition-colors"
+        >
+          Sign in
+        </a>
+      </div>
     );
   }
 

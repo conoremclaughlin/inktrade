@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   Quote,
@@ -360,63 +360,68 @@ export function useThetaProjection(params: ThetaProjectionParams | null) {
 
 // --- Watchlist ---
 
-const WATCHLIST_KEY = 'inktrade:watchlist';
-
-const DEFAULT_WATCHLIST = [
-  'SPY', 'QQQ', 'IWM', 'VIX',
-  'NVDA', 'AMD', 'AVGO', 'TSM',
-  'AAPL', 'GOOG', 'AMZN', 'MSFT', 'TSLA',
-  'SOXL', 'NFLX', 'NET',
-];
-
-function loadWatchlist(): string[] {
-  if (typeof window === 'undefined') return DEFAULT_WATCHLIST;
-  try {
-    const stored = localStorage.getItem(WATCHLIST_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch { /* ignore */ }
-  return DEFAULT_WATCHLIST;
-}
-
-function saveWatchlist(symbols: string[]) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(WATCHLIST_KEY, JSON.stringify(symbols));
-}
+import { useUser } from '@/lib/hooks/use-auth';
 
 export function useWatchlistSymbols() {
-  const [symbols, setSymbolsRaw] = useState<string[]>(loadWatchlist);
+  const { isAuthenticated } = useUser();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery<{ symbols: string[] }>({
+    queryKey: ['watchlist'],
+    queryFn: () => fetchJson('/api/watchlist'),
+    enabled: isAuthenticated,
+    staleTime: 60_000,
+  });
+
+  const mutation = useMutation({
+    mutationFn: (symbols: string[]) =>
+      fetch('/api/watchlist', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols }),
+      }).then((r) => {
+        if (!r.ok) throw new Error('Failed to update watchlist');
+        return r.json() as Promise<{ symbols: string[] }>;
+      }),
+    onMutate: async (newSymbols) => {
+      await queryClient.cancelQueries({ queryKey: ['watchlist'] });
+      const previous = queryClient.getQueryData<{ symbols: string[] }>(['watchlist']);
+      queryClient.setQueryData(['watchlist'], { symbols: newSymbols });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(['watchlist'], context.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+    },
+  });
+
+  const symbols = data?.symbols ?? [];
 
   const setSymbols = useCallback((next: string[] | ((prev: string[]) => string[])) => {
-    setSymbolsRaw((prev) => {
-      const resolved = typeof next === 'function' ? next(prev) : next;
-      saveWatchlist(resolved);
-      return resolved;
-    });
-  }, []);
+    const resolved = typeof next === 'function' ? next(symbols) : next;
+    mutation.mutate(resolved);
+  }, [symbols, mutation]);
 
   const addSymbol = useCallback((sym: string) => {
     const upper = sym.toUpperCase().trim();
-    if (!upper) return;
-    setSymbols((prev) => prev.includes(upper) ? prev : [...prev, upper]);
-  }, [setSymbols]);
+    if (!upper || symbols.includes(upper)) return;
+    mutation.mutate([...symbols, upper]);
+  }, [symbols, mutation]);
 
   const removeSymbol = useCallback((sym: string) => {
-    setSymbols((prev) => prev.filter((s) => s !== sym.toUpperCase()));
-  }, [setSymbols]);
+    mutation.mutate(symbols.filter((s) => s !== sym.toUpperCase()));
+  }, [symbols, mutation]);
 
   const moveSymbol = useCallback((from: number, to: number) => {
-    setSymbols((prev) => {
-      const next = [...prev];
-      const [item] = next.splice(from, 1);
-      next.splice(to, 0, item);
-      return next;
-    });
-  }, [setSymbols]);
+    const next = [...symbols];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    mutation.mutate(next);
+  }, [symbols, mutation]);
 
-  return { symbols, setSymbols, addSymbol, removeSymbol, moveSymbol };
+  return { symbols, setSymbols, addSymbol, removeSymbol, moveSymbol, isLoading };
 }
 
 export function useWatchlistQuotes(symbols: string[]) {

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import type { Quote } from '@inktrade/engine/math';
 import { useWatchlistSymbols, useWatchlistQuotes } from '@/lib/hooks';
+import { useUser } from '@/lib/hooks/use-auth';
 
 const PANEL_KEY = 'inktrade:watchlist-panel';
 
@@ -28,6 +29,7 @@ interface WatchlistPanelProps {
 
 export function WatchlistPanel({ activeSymbol, onSymbolClick }: WatchlistPanelProps) {
   const [isOpen, setIsOpen] = useState(loadPanelOpen);
+  const { isAuthenticated, isLoading: authLoading } = useUser();
   const { symbols, addSymbol, removeSymbol } = useWatchlistSymbols();
   const { data: quotesData } = useWatchlistQuotes(symbols);
   const [addInput, setAddInput] = useState('');
@@ -82,91 +84,107 @@ export function WatchlistPanel({ activeSymbol, onSymbolClick }: WatchlistPanelPr
             </div>
           </div>
 
-          {/* Add input */}
-          <form
-            onSubmit={(e) => { e.preventDefault(); handleAdd(); }}
-            className="flex gap-1 px-2 py-1.5 border-b border-border-subtle"
-          >
-            <input
-              type="text"
-              value={addInput}
-              onChange={(e) => setAddInput(e.target.value.toUpperCase())}
-              placeholder="Add symbol..."
-              className="flex-1 min-w-0 bg-transparent text-[11px] font-mono text-text-primary placeholder:text-text-muted outline-none px-1.5 py-0.5 rounded border border-transparent focus:border-accent/30"
-            />
-            <button
-              type="submit"
-              disabled={!addInput.trim()}
-              className="text-[10px] font-semibold text-accent-bright px-1.5 py-0.5 rounded hover:bg-accent/10 disabled:opacity-30 disabled:cursor-default transition-colors"
-            >
-              +
-            </button>
-          </form>
-
-          {/* Symbol list */}
-          <div className="flex-1 overflow-y-auto scrollbar-thin">
-            {symbols.map((sym) => {
-              const q = quoteMap.get(sym);
-              const isActive = sym === activeSymbol;
-              const changeColor = q
-                ? q.changePercent >= 0 ? 'text-emerald' : 'text-rose'
-                : 'text-text-muted';
-
-              return (
-                <div
-                  key={sym}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onSymbolClick(sym)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') onSymbolClick(sym); }}
-                  className={`relative w-full flex items-center justify-between px-3 py-1.5 text-left transition-colors group cursor-pointer ${
-                    isActive
-                      ? 'bg-accent/10 border-l-2 border-accent'
-                      : 'hover:bg-bg-secondary/60 border-l-2 border-transparent'
-                  }`}
+          {!authLoading && !isAuthenticated ? (
+            <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 text-center">
+              <div className="text-[12px] text-text-muted mb-3">
+                Sign in to track symbols
+              </div>
+              <a
+                href="/login"
+                className="px-4 py-1.5 rounded-lg bg-accent/15 text-accent-bright text-[12px] font-semibold border border-accent/30 hover:bg-accent/25 transition-colors"
+              >
+                Sign in
+              </a>
+            </div>
+          ) : (
+            <>
+              {/* Add input */}
+              <form
+                onSubmit={(e) => { e.preventDefault(); handleAdd(); }}
+                className="flex gap-1 px-2 py-1.5 border-b border-border-subtle"
+              >
+                <input
+                  type="text"
+                  value={addInput}
+                  onChange={(e) => setAddInput(e.target.value.toUpperCase())}
+                  placeholder="Add symbol..."
+                  className="flex-1 min-w-0 bg-transparent text-[11px] font-mono text-text-primary placeholder:text-text-muted outline-none px-1.5 py-0.5 rounded border border-transparent focus:border-accent/30"
+                />
+                <button
+                  type="submit"
+                  disabled={!addInput.trim()}
+                  className="text-[10px] font-semibold text-accent-bright px-1.5 py-0.5 rounded hover:bg-accent/10 disabled:opacity-30 disabled:cursor-default transition-colors"
                 >
-                  <div className="min-w-0">
-                    <div className={`text-[12px] font-mono font-semibold truncate ${
-                      isActive ? 'text-accent-bright' : 'text-text-primary'
-                    }`}>
-                      {sym}
-                    </div>
-                  </div>
-                  <div className="text-right flex-shrink-0 ml-2">
-                    {q ? (
-                      <>
-                        <div className="text-[11px] font-mono text-text-primary">
-                          {formatPrice(q.price)}
-                        </div>
-                        <div className={`text-[10px] font-mono ${changeColor}`}>
-                          {q.changePercent >= 0 ? '+' : ''}{q.changePercent.toFixed(2)}%
-                        </div>
-                      </>
-                    ) : (
-                      <div className="text-[10px] font-mono text-text-muted">...</div>
-                    )}
-                  </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); removeSymbol(sym); }}
-                    className="absolute right-1 opacity-0 group-hover:opacity-60 hover:!opacity-100 text-text-muted hover:text-rose text-[10px] p-0.5 transition-opacity"
-                    title={`Remove ${sym}`}
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+                  +
+                </button>
+              </form>
 
-          {/* Footer */}
-          <div className="px-3 py-1.5 border-t border-border-subtle">
-            <a
-              href="/watchlist"
-              className="text-[10px] text-text-muted hover:text-accent-bright transition-colors font-mono"
-            >
-              Full watchlist →
-            </a>
-          </div>
+              {/* Symbol list */}
+              <div className="flex-1 overflow-y-auto scrollbar-thin">
+                {symbols.map((sym) => {
+                  const q = quoteMap.get(sym);
+                  const isActive = sym === activeSymbol;
+                  const changeColor = q
+                    ? q.changePercent >= 0 ? 'text-emerald' : 'text-rose'
+                    : 'text-text-muted';
+
+                  return (
+                    <div
+                      key={sym}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onSymbolClick(sym)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') onSymbolClick(sym); }}
+                      className={`relative w-full flex items-center justify-between px-3 py-1.5 text-left transition-colors group cursor-pointer ${
+                        isActive
+                          ? 'bg-accent/10 border-l-2 border-accent'
+                          : 'hover:bg-bg-secondary/60 border-l-2 border-transparent'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className={`text-[12px] font-mono font-semibold truncate ${
+                          isActive ? 'text-accent-bright' : 'text-text-primary'
+                        }`}>
+                          {sym}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-2">
+                        {q ? (
+                          <>
+                            <div className="text-[11px] font-mono text-text-primary">
+                              {formatPrice(q.price)}
+                            </div>
+                            <div className={`text-[10px] font-mono ${changeColor}`}>
+                              {q.changePercent >= 0 ? '+' : ''}{q.changePercent.toFixed(2)}%
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-[10px] font-mono text-text-muted">...</div>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeSymbol(sym); }}
+                        className="absolute right-1 opacity-0 group-hover:opacity-60 hover:!opacity-100 text-text-muted hover:text-rose text-[10px] p-0.5 transition-opacity"
+                        title={`Remove ${sym}`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Footer */}
+              <div className="px-3 py-1.5 border-t border-border-subtle">
+                <a
+                  href="/watchlist"
+                  className="text-[10px] text-text-muted hover:text-accent-bright transition-colors font-mono"
+                >
+                  Full watchlist →
+                </a>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
