@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { loadConfig, saveConfig, createTokenStore } from '@inktrade/engine/config';
+import { loadConfig, saveConfig, createTokenStore, resolveSchwabCredentials } from '@inktrade/engine/config';
 import { SchwabMarketService } from '@inktrade/engine/services';
 
 export async function GET(request: NextRequest) {
@@ -10,13 +10,14 @@ export async function GET(request: NextRequest) {
   }
 
   const config = await loadConfig();
+  const resolved = resolveSchwabCredentials(config);
 
-  if (!config.schwab?.appKey || !config.schwab?.appSecret) {
+  if (!resolved) {
     return NextResponse.redirect(new URL('/settings?error=not_configured', request.url));
   }
 
   const tokenStore = createTokenStore();
-  const service = new SchwabMarketService(config.schwab, tokenStore);
+  const service = new SchwabMarketService(resolved.credentials, tokenStore);
 
   try {
     await service.exchangeCode(code);

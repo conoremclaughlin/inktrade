@@ -285,6 +285,8 @@ export interface SchwabStatus {
   message?: string;
   authUrl?: string;
   provider?: string;
+  credentialSource?: 'env' | 'config';
+  redirectUri?: string;
   tokenExpiresAt?: number;
   refreshExpiresAt?: number;
 }

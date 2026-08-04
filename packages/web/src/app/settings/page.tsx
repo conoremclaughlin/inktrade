@@ -36,6 +36,9 @@ export default function SettingsPage() {
   const isConnected = status?.status === 'connected';
   const isConfigured = status?.status === 'configured' || status?.status === 'disconnected' || status?.status === 'expired';
   const needsReauth = status?.status === 'expired';
+  // Env credentials take precedence over the config file, so editing the form
+  // there would be a no-op — hide it and say where the values came from.
+  const isEnvConfigured = status?.credentialSource === 'env';
 
   return (
     <div className="min-h-screen bg-void">
@@ -158,8 +161,23 @@ export default function SettingsPage() {
               </div>
             )}
 
+            {/* App credentials supplied by the environment */}
+            {isEnvConfigured && (
+              <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-border-subtle bg-surface/50 px-3 py-2.5">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="mt-0.5 flex-shrink-0 text-text-muted">
+                  <path d="M5 6V4.5a3 3 0 016 0V6m-7 0h8a1 1 0 011 1v5a1 1 0 01-1 1H4a1 1 0 01-1-1V7a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <p className="text-[12px] text-text-tertiary">
+                  App credentials loaded from{' '}
+                  <code className="font-mono text-text-secondary">SCHWAB_APP_KEY</code> /{' '}
+                  <code className="font-mono text-text-secondary">SCHWAB_APP_SECRET</code>. Edit{' '}
+                  <code className="font-mono text-text-secondary">.env.local</code> to change them.
+                </p>
+              </div>
+            )}
+
             {/* Unconfigured — show credential form */}
-            {(status?.status === 'unconfigured' || showCredentials) && (
+            {!isEnvConfigured && (status?.status === 'unconfigured' || showCredentials) && (
               <div className="space-y-4">
                 {!showCredentials && (
                   <p className="text-[13px] text-text-secondary">
@@ -226,7 +244,7 @@ export default function SettingsPage() {
             )}
 
             {/* Toggle credentials form when already configured */}
-            {isConfigured && !showCredentials && (
+            {isConfigured && !showCredentials && !isEnvConfigured && (
               <button
                 onClick={() => setShowCredentials(true)}
                 className="mt-3 text-[12px] text-text-tertiary hover:text-text-secondary transition-colors"

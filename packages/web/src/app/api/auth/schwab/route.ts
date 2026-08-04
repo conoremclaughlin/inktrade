@@ -1,38 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { loadConfig, saveConfig, createTokenStore } from '@inktrade/engine/config';
+import {
+  loadConfig,
+  saveConfig,
+  createTokenStore,
+  resolveSchwabCredentials,
+  hasValidTokens,
+  DEFAULT_REDIRECT_URI,
+} from '@inktrade/engine/config';
 import { SchwabMarketService } from '@inktrade/engine/services';
 
 export async function GET() {
   const config = await loadConfig();
-  const tokenStore = createTokenStore();
-  const tokens = await tokenStore.load();
+  const resolved = resolveSchwabCredentials(config);
 
-  const hasCredentials = !!(config.schwab?.appKey && config.schwab?.appSecret);
-  const hasTokens = !!tokens;
-  const tokenExpired = tokens ? Date.now() >= tokens.refreshExpiresAt : false;
-
-  if (!hasCredentials) {
+  if (!resolved) {
     return NextResponse.json({
       status: 'unconfigured',
       message: 'Schwab app credentials not configured',
     });
   }
 
+  const tokenStore = createTokenStore();
+  const tokens = await tokenStore.load();
+  const hasTokens = hasValidTokens(tokens);
+  const tokenExpired = hasTokens && Date.now() >= tokens.refreshExpiresAt;
+
   if (hasTokens && !tokenExpired) {
     return NextResponse.json({
       status: 'connected',
       provider: config.provider,
-      tokenExpiresAt: tokens!.expiresAt,
-      refreshExpiresAt: tokens!.refreshExpiresAt,
+      credentialSource: resolved.source,
+      tokenExpiresAt: tokens.expiresAt,
+      refreshExpiresAt: tokens.refreshExpiresAt,
     });
   }
 
-  const service = new SchwabMarketService(config.schwab!, tokenStore);
-  const authUrl = service.getAuthorizationUrl();
+  const service = new SchwabMarketService(resolved.credentials, tokenStore);
 
   return NextResponse.json({
     status: tokenExpired ? 'expired' : 'disconnected',
-    authUrl,
+    credentialSource: resolved.source,
+    redirectUri: resolved.credentials.redirectUri,
+    authUrl: service.getAuthorizationUrl(),
   });
 }
 
@@ -48,17 +57,17 @@ export async function POST(request: NextRequest) {
   config.schwab = {
     appKey,
     appSecret,
-    redirectUri: redirectUri || 'https://127.0.0.1:6001/api/auth/schwab/callback',
+    redirectUri: redirectUri || DEFAULT_REDIRECT_URI,
   };
   await saveConfig(config);
 
   const tokenStore = createTokenStore();
   const service = new SchwabMarketService(config.schwab, tokenStore);
-  const authUrl = service.getAuthorizationUrl();
 
   return NextResponse.json({
     status: 'configured',
-    authUrl,
+    credentialSource: 'config',
+    authUrl: service.getAuthorizationUrl(),
   });
 }
 

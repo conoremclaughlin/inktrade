@@ -23,6 +23,56 @@ const DEFAULT_CONFIG: InktradeConfig = {
   provider: 'yahoo',
 };
 
+export const DEFAULT_REDIRECT_URI = 'https://127.0.0.1:6001/api/auth/schwab/callback';
+
+export type CredentialSource = 'env' | 'config';
+
+export interface ResolvedCredentials {
+  credentials: SchwabCredentials;
+  source: CredentialSource;
+}
+
+/**
+ * Resolve Schwab app credentials, preferring environment variables.
+ *
+ * These identify the *application*, not the end user — the user's identity
+ * comes from the OAuth browser flow. So they belong in the environment, not
+ * in a form. The config-file path stays as a fallback for credentials that
+ * were already entered through /settings.
+ */
+export function resolveSchwabCredentials(config: InktradeConfig): ResolvedCredentials | null {
+  const envKey = process.env.SCHWAB_APP_KEY?.trim();
+  const envSecret = process.env.SCHWAB_APP_SECRET?.trim();
+
+  if (envKey && envSecret) {
+    return {
+      credentials: {
+        appKey: envKey,
+        appSecret: envSecret,
+        redirectUri: process.env.SCHWAB_REDIRECT_URI?.trim() || DEFAULT_REDIRECT_URI,
+      },
+      source: 'env',
+    };
+  }
+
+  if (config.schwab?.appKey && config.schwab?.appSecret) {
+    return {
+      credentials: {
+        ...config.schwab,
+        redirectUri: config.schwab.redirectUri || DEFAULT_REDIRECT_URI,
+      },
+      source: 'config',
+    };
+  }
+
+  return null;
+}
+
+/** Tokens cleared by a disconnect are stored as empty strings rather than removed. */
+export function hasValidTokens(tokens: SchwabTokens | null): tokens is SchwabTokens {
+  return !!tokens?.accessToken && !!tokens?.refreshToken;
+}
+
 async function ensureDir(): Promise<void> {
   await mkdir(CONFIG_DIR, { recursive: true });
 }

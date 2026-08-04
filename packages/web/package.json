@@ -5,6 +5,7 @@
   "description": "Inktrade web application",
   "scripts": {
     "dev": "next dev -p 6001",
+    "dev:https": "next dev -p 6001 --experimental-https",
     "build": "next build",
     "start": "next start -p 6001",
     "lint": "next lint",
