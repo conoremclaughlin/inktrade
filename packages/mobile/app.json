@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Inktrade",
+    "slug": "inktrade",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#06080d",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.inkwell.inktrade"
+    },
+    "android": {
+      "package": "com.inkwell.inktrade",
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": []
+  }
+}

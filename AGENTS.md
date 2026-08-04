@@ -39,20 +39,42 @@ Throughout the session, use `update_session_phase` for structural status changes
 
 ## Project Overview
 
-Inktrade is a collectible card game marketplace. The repo is a yarn workspaces monorepo:
+Inktrade is an options trading intelligence platform — leverage modelling, Greeks
+visualization, LETF analysis, and portfolio risk. The repo is a yarn workspaces monorepo:
 
+- **`packages/engine`** — pure TypeScript domain logic: options math, market data providers, LETF/rolling/portfolio analysis. No UI, no HTTP server.
+- **`packages/client`** — shared client layer: API wire types, fetch client, React Query definitions, indicator math. Consumed by both web and mobile.
 - **`packages/web`** — Next.js web application (Next.js 16, React 19, Tailwind v4)
+- **`packages/mobile`** — Expo / React Native app (Expo SDK 57, RN 0.86, React Navigation)
+- **`packages/cli`** — command-line interface
 
 ## Architecture
 
 ```
 packages/
-  web/
-    src/
-      app/           # Next.js App Router pages
-      components/    # React components
-      lib/           # Utilities and shared logic
+  engine/src/       # options math, providers, analysis (platform-agnostic)
+  client/src/       # types, api client, query defs, indicators (platform-agnostic)
+  web/src/
+    app/            # Next.js App Router pages + API routes
+    components/     # React DOM components (recharts, lightweight-charts)
+    lib/            # web-only hooks and utilities
+  mobile/
+    src/screens/    # React Navigation screens
+    src/components/ # React Native components (react-native-svg)
+    src/charts/     # WebView-hosted chart document
+    src/ui/         # theme tokens and formatters
 ```
+
+### Sharing rule
+
+**Data is shared; rendering is not.** Anything platform-agnostic — wire types, fetching,
+query keys, stores, indicator math — belongs in `packages/client` or `packages/engine`.
+Chart and view components stay in their platform package, because web renders to the DOM
+and mobile renders natively.
+
+Mobile is native React Native throughout, with one deliberate exception: the candlestick
+chart runs `lightweight-charts` inside a WebView, since replicating its crosshair and
+pan/zoom natively is a project in itself. Everything else uses `react-native-svg`.
 
 ## Coding Conventions
 
@@ -77,4 +99,9 @@ yarn test             # Run all tests
 # Package-scoped
 yarn workspace @inktrade/web dev
 yarn workspace @inktrade/web build
+
+# Mobile (Expo)
+yarn workspace @inktrade/mobile start      # Metro bundler
+yarn workspace @inktrade/mobile ios        # iOS simulator
+yarn workspace @inktrade/mobile android    # Android emulator
 ```
