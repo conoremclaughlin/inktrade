@@ -1,0 +1,30 @@
+{
+  "name": "@inktrade/client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Inktrade shared client layer — API types, fetch client, and query definitions shared across web and mobile",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5.62.0"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.62.0",
+    "@types/node": "^20.10.6",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.6"
+  }
+}
