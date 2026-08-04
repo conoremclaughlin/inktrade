@@ -1,18 +1,31 @@
+import Constants from 'expo-constants';
 import { createApiClient } from '@inktrade/client';
+import { describeApiUrlProblem, resolveApiUrl, type ResolvedApiUrl } from './resolveApiUrl';
+
+/** Port the Inktrade web API listens on — see packages/web/package.json. */
+const WEB_API_PORT = 6001;
 
 /**
- * React Native has no page origin, so the API base URL must be absolute and
- * reachable from the device. `localhost` resolves to the phone itself, not the
- * dev machine — use the LAN address shown when the Next dev server starts.
+ * In a dev build the phone is already connected to Metro, so expo-constants
+ * exposes the dev machine's host (e.g. "192.168.86.60:8081"). The web API runs
+ * on that same machine, so reusing the host means the app follows a changing
+ * LAN IP with no rebuild and no .env edit.
  *
- * Set EXPO_PUBLIC_API_URL in packages/mobile/.env.local. Expo inlines any
- * EXPO_PUBLIC_-prefixed var at build time.
+ * `hostUri` is absent in standalone/TestFlight builds, where the explicit env
+ * override or the configured production URL applies instead.
  */
-const DEFAULT_DEV_API_URL = 'http://localhost:6001';
+const resolved: ResolvedApiUrl = resolveApiUrl({
+  explicit: process.env.EXPO_PUBLIC_API_URL,
+  metroHostUri: Constants.expoConfig?.hostUri,
+  productionApiUrl: Constants.expoConfig?.extra?.productionApiUrl as string | undefined,
+  isDev: __DEV__,
+  port: WEB_API_PORT,
+});
 
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL?.trim() || DEFAULT_DEV_API_URL;
+export const API_BASE_URL = resolved.url;
+export const API_URL_SOURCE = resolved.source;
 
-/** True when the base URL points at the device itself, which never works on hardware. */
-export const isLoopbackApiUrl = /^https?:\/\/(localhost|127\.0\.0\.1)/.test(API_BASE_URL);
+/** Hint explaining a connection failure, or undefined if the setup looks sound. */
+export const API_URL_HINT = describeApiUrlProblem(resolved, __DEV__);
 
 export const api = createApiClient({ baseUrl: API_BASE_URL });

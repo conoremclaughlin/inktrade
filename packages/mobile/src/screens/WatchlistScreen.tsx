@@ -13,7 +13,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { Quote } from '@inktrade/client';
 import type { RootStackParamList } from '../navigation';
 import { useWatchlistQuotes, useWatchlistSymbols } from '../hooks/useWatchlist';
-import { API_BASE_URL, isLoopbackApiUrl } from '../lib/api';
+import { API_BASE_URL, API_URL_HINT } from '../lib/api';
 import { changeColor, colors, fonts, formatPercent, formatPrice, radii, spacing } from '../ui/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Watchlist'>;
@@ -74,12 +74,7 @@ export function WatchlistScreen({ navigation }: Props) {
       {error && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>Couldn&apos;t reach the API at {API_BASE_URL}</Text>
-          {isLoopbackApiUrl && (
-            <Text style={styles.errorHint}>
-              On a physical device localhost is the phone itself. Set EXPO_PUBLIC_API_URL to your
-              machine&apos;s LAN address.
-            </Text>
-          )}
+          {API_URL_HINT && <Text style={styles.errorHint}>{API_URL_HINT}</Text>}
         </View>
       )}
 

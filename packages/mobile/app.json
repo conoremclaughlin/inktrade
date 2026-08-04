@@ -14,6 +14,10 @@
       "package": "com.inkwell.inktrade",
       "predictiveBackGestureEnabled": false
     },
-    "plugins": []
+    "plugins": [],
+    "extra": {
+      "//productionApiUrl": "API base URL for release builds, which have no Metro host to autodiscover from. Dev builds ignore this. Set before shipping — until then release builds fall back to loopback and surface an error.",
+      "productionApiUrl": null
+    }
   }
 }
