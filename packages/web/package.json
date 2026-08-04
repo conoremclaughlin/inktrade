@@ -32,6 +32,7 @@
     "@types/react-is": "^19",
     "postcss": "^8.5.0",
     "tailwindcss": "^4.1.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.6"
   }
 }
