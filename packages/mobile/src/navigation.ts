@@ -1,5 +1,10 @@
+export type TabParamList = {
+  Portfolio: undefined;
+  Lists: undefined;
+};
+
 export type RootStackParamList = {
-  Watchlist: undefined;
+  Tabs: undefined;
   Stock: { symbol: string };
 };
 

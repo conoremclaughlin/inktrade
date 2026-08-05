@@ -1772,6 +1772,7 @@ __metadata:
     "@inktrade/client": "workspace:^"
     "@inktrade/engine": "workspace:^"
     "@react-native-async-storage/async-storage": "npm:2.2.0"
+    "@react-navigation/bottom-tabs": "npm:^7.18.14"
     "@react-navigation/native": "npm:^7.3.5"
     "@react-navigation/native-stack": "npm:^7.17.7"
     "@tanstack/react-query": "npm:^5.62.0"
@@ -2133,6 +2134,23 @@ __metadata:
     "@types/react":
       optional: true
   checksum: 10/a894716f737d797829afa8dda0324e7ff48d12918bef7b3e23c7351a34fa87e41d202a4618db7888e963ea107e758f68f6905307c5093a9fe2f24d38205ba0b3
+  languageName: node
+  linkType: hard
+
+"@react-navigation/bottom-tabs@npm:^7.18.14":
+  version: 7.18.14
+  resolution: "@react-navigation/bottom-tabs@npm:7.18.14"
+  dependencies:
+    "@react-navigation/elements": "npm:^2.9.36"
+    color: "npm:^4.2.3"
+    sf-symbols-typescript: "npm:^2.1.0"
+  peerDependencies:
+    "@react-navigation/native": ^7.3.14
+    react: ">= 18.2.0"
+    react-native: "*"
+    react-native-safe-area-context: ">= 4.0.0"
+    react-native-screens: ">= 4.0.0"
+  checksum: 10/e53410e4311c80a482e9e1bd1ac203f5b900d4b778f82899bce4123404b900ea0d42316fb4e4202b66b0c21ed4fbce4df5f9d129189221799cc74a345b964b37
   languageName: node
   linkType: hard
 

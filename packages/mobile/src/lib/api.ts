@@ -14,9 +14,19 @@ const WEB_API_PORT = 6001;
  * `hostUri` is absent in standalone/TestFlight builds, where the explicit env
  * override or the configured production URL applies instead.
  */
+// Which of these Expo populates depends on the runtime, so try them all rather
+// than trusting one and silently landing on loopback.
+const constantsAny = Constants as unknown as Record<string, any>;
+
 const resolved: ResolvedApiUrl = resolveApiUrl({
   explicit: process.env.EXPO_PUBLIC_API_URL,
-  metroHostUri: Constants.expoConfig?.hostUri,
+  metroHostCandidates: [
+    Constants.expoConfig?.hostUri,
+    constantsAny.expoGoConfig?.debuggerHost,
+    constantsAny.manifest?.debuggerHost,
+    constantsAny.manifest2?.extra?.expoGo?.debuggerHost,
+    Constants.linkingUri,
+  ],
   productionApiUrl: Constants.expoConfig?.extra?.productionApiUrl as string | undefined,
   isDev: __DEV__,
   port: WEB_API_PORT,
