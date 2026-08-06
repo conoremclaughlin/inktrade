@@ -1798,6 +1798,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@inktrade/web@workspace:packages/web"
   dependencies:
+    "@inktrade/client": "workspace:^"
     "@inktrade/engine": "workspace:^"
     "@supabase/ssr": "npm:^0.5.2"
     "@supabase/supabase-js": "npm:^2.49.8"

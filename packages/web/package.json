@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@inktrade/client": "workspace:^",
     "@inktrade/engine": "workspace:^",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.8",

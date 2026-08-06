@@ -76,6 +76,12 @@ export function Navbar() {
             Stock
           </a>
           <a
+            href="/chain"
+            className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
+          >
+            Chain
+          </a>
+          <a
             href="/strategies"
             className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
           >

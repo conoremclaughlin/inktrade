@@ -1,5 +1,6 @@
 import type { ApiClient } from './client.js';
 import type { HistoryPeriod } from './types.js';
+import type { OptionChain } from './broker/types.js';
 
 /**
  * Query keys and options shared by web and mobile.
@@ -105,7 +106,7 @@ export function optionChainQuery(api: ApiClient, symbol: string | null, expirati
     staleTime: CHAIN_STALE_MS,
     // Keep the previous expiration on screen while the next one loads, so
     // stepping through the ladder doesn't blank the table each time.
-    placeholderData: (prev: unknown) => prev,
+    placeholderData: (prev: OptionChain | undefined) => prev,
   };
 }
 
