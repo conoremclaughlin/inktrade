@@ -7,6 +7,8 @@
  * a new BrokerProvider rather than a change to every view.
  */
 
+import type { Quote } from '../types.js';
+
 export type AssetType = 'EQUITY' | 'ETF' | 'OPTION' | 'CASH';
 
 export interface OptionDetail {
@@ -107,6 +109,93 @@ export interface OrderActivity {
   timestamp: string;
   /** Present for option orders — lets the UI show strike and expiry. */
   option?: OptionDetail;
+}
+
+/**
+ * One option contract, priced.
+ *
+ * Greeks are part of the contract rather than a separate lookup because the
+ * brokerage returns them with the quote — computing them locally from a spot
+ * price and an IV guess would be strictly worse than the market's own numbers.
+ * They are optional because not every source provides them; a provider that
+ * can't must leave them undefined rather than send zeros, which read as real.
+ */
+export interface OptionContract {
+  /** Provider-specific contract id, used to request a fresh quote. */
+  id: string;
+  underlyingSymbol: string;
+  putCall: 'PUT' | 'CALL';
+  strike: number;
+  /** ISO date (YYYY-MM-DD). */
+  expiration: string;
+  multiplier: number;
+
+  bid: number | null;
+  ask: number | null;
+  /** Mid/mark — the price to value a position at. */
+  mark: number | null;
+  previousClose: number | null;
+
+  impliedVolatility?: number;
+  delta?: number;
+  gamma?: number;
+  theta?: number;
+  vega?: number;
+  rho?: number;
+
+  openInterest?: number;
+  volume?: number;
+  breakEvenPrice?: number;
+  /** Provider's own probability estimate, when it offers one. */
+  chanceOfProfitLong?: number;
+  chanceOfProfitShort?: number;
+}
+
+export interface OptionChain {
+  symbol: string;
+  /** The expiration these contracts belong to. */
+  expiration: string;
+  /** Every expiration available for the underlying, ascending. */
+  expirations: string[];
+  underlyingPrice: number | null;
+  contracts: OptionContract[];
+}
+
+/** A watchlist as the brokerage holds it. */
+export interface BrokerWatchlist {
+  id: string;
+  name: string;
+  emoji?: string;
+  symbolCount: number;
+  /** False for provider-curated lists, which can only be followed. */
+  editable: boolean;
+}
+
+export interface BrokerWatchlistDetail extends BrokerWatchlist {
+  symbols: string[];
+}
+
+/**
+ * Market data, separate from the portfolio contract.
+ *
+ * A brokerage that reports holdings does not necessarily serve chains, and a
+ * market-data source serves chains without holding anything. Splitting them
+ * lets each provider implement only what it actually has.
+ */
+export interface MarketDataProvider {
+  getQuotes(symbols: string[]): Promise<Quote[]>;
+  /** Available expirations for an underlying, ascending. */
+  getOptionExpirations(symbol: string): Promise<string[]>;
+  /** Omit `expiration` for the nearest one. */
+  getOptionChain(symbol: string, expiration?: string): Promise<OptionChain>;
+  getWatchlists(): Promise<BrokerWatchlist[]>;
+  getWatchlist(id: string): Promise<BrokerWatchlistDetail>;
+}
+
+export function hasMarketData(
+  provider: BrokerProvider,
+): provider is BrokerProvider & MarketDataProvider {
+  return typeof (provider as Partial<MarketDataProvider>).getOptionChain === 'function';
 }
 
 export type OrderType = 'MARKET' | 'LIMIT' | 'STOP' | 'STOP_LIMIT';

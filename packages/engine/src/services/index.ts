@@ -8,6 +8,7 @@ export {
 } from './schwab.js';
 export { OptionsService } from './options.js';
 export { callToolJson } from './mcp/tools.js';
+export { ToolCache, DEFAULT_TOOL_TTLS, cacheKey, type ToolCacheOptions } from './mcp/cache.js';
 export { McpOAuthProvider, type McpOAuthProviderOptions } from './mcp/provider.js';
 export {
   createFileCredentialStore,

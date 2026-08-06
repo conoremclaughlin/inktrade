@@ -53,3 +53,83 @@ export function oiDistributionQuery(api: ApiClient, symbol: string | null, expir
     staleTime: HISTORY_STALE_MS,
   };
 }
+
+// --- Linked brokerage ------------------------------------------------------
+//
+// One set of query definitions for web and mobile. Cache identity and
+// refetch behaviour should not differ by platform — a portfolio is the same
+// query wherever it's drawn — so only the rendering lives downstream.
+
+export const brokerKeys = {
+  portfolio: () => ['broker', 'portfolio'] as const,
+  quotes: (symbols: string[]) => ['broker', 'quotes', [...symbols].sort().join(',')] as const,
+  chain: (symbol: string, expiration?: string) =>
+    ['broker', 'chain', symbol, expiration ?? 'nearest'] as const,
+  watchlists: () => ['broker', 'watchlists'] as const,
+  watchlist: (id: string) => ['broker', 'watchlist', id] as const,
+  orders: (symbol?: string) => ['broker', 'orders', symbol ?? 'all'] as const,
+};
+
+/** Holdings move only on a fill, so they tolerate more staleness than quotes. */
+export const PORTFOLIO_STALE_MS = 30_000;
+export const PORTFOLIO_REFETCH_MS = 60_000;
+/** Chains are heavy — three upstream calls joined — so refetch on demand only. */
+export const CHAIN_STALE_MS = 30_000;
+/** Watchlist membership changes only when someone edits it. */
+export const WATCHLIST_STALE_MS = 5 * 60_000;
+
+export function portfolioQuery(api: ApiClient) {
+  return {
+    queryKey: brokerKeys.portfolio(),
+    queryFn: () => api.getPortfolio(),
+    staleTime: PORTFOLIO_STALE_MS,
+    refetchInterval: PORTFOLIO_REFETCH_MS,
+  };
+}
+
+export function brokerQuotesQuery(api: ApiClient, symbols: string[]) {
+  return {
+    queryKey: brokerKeys.quotes(symbols),
+    queryFn: () => api.getBrokerQuotes(symbols),
+    enabled: symbols.length > 0,
+    staleTime: QUOTES_STALE_MS,
+    refetchInterval: QUOTES_REFETCH_MS,
+  };
+}
+
+export function optionChainQuery(api: ApiClient, symbol: string | null, expiration?: string) {
+  return {
+    queryKey: brokerKeys.chain(symbol ?? '', expiration),
+    queryFn: () => api.getOptionChain(symbol!, expiration),
+    enabled: !!symbol,
+    staleTime: CHAIN_STALE_MS,
+    // Keep the previous expiration on screen while the next one loads, so
+    // stepping through the ladder doesn't blank the table each time.
+    placeholderData: (prev: unknown) => prev,
+  };
+}
+
+export function brokerWatchlistsQuery(api: ApiClient) {
+  return {
+    queryKey: brokerKeys.watchlists(),
+    queryFn: () => api.getBrokerWatchlists(),
+    staleTime: WATCHLIST_STALE_MS,
+  };
+}
+
+export function brokerWatchlistQuery(api: ApiClient, id: string | null) {
+  return {
+    queryKey: brokerKeys.watchlist(id ?? ''),
+    queryFn: () => api.getBrokerWatchlist(id!),
+    enabled: !!id,
+    staleTime: WATCHLIST_STALE_MS,
+  };
+}
+
+export function orderActivityQuery(api: ApiClient, symbol?: string, limit?: number) {
+  return {
+    queryKey: brokerKeys.orders(symbol),
+    queryFn: () => api.getOrderActivity({ symbol, limit }),
+    staleTime: PORTFOLIO_STALE_MS,
+  };
+}

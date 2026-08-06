@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { robinhoodConnection } from '@/lib/robinhood';
+import { resetRobinhoodRuntime, robinhoodConnection } from '@/lib/robinhood';
 
 /**
  * Where Robinhood returns the user after they approve.
@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
 
   try {
     await robinhoodConnection(request.url).completeLink(params);
+    // A fresh link means fresh credentials; anything held from before is stale.
+    resetRobinhoodRuntime();
     settings.searchParams.set('linked', 'robinhood');
   } catch (err) {
     settings.searchParams.set('error', (err as Error).message);

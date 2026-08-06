@@ -33,7 +33,12 @@
 
 import type {
   BrokerProvider,
+  BrokerWatchlist,
+  BrokerWatchlistDetail,
   BrokerageAccount,
+  MarketDataProvider,
+  OptionChain,
+  OptionContract,
   OptionDetail,
   OrderActivity,
   OrderReceipt,
@@ -47,10 +52,20 @@ import type {
   Position,
   TradingProvider,
 } from '@inktrade/client/broker';
+import type { Quote } from '@inktrade/client';
 import type { Client } from '@modelcontextprotocol/client';
 import { randomUUID } from 'node:crypto';
 import { callToolJson } from '../mcp/tools.js';
 import { ToolCache } from '../mcp/cache.js';
+import {
+  chainExpirations,
+  chainIdFor,
+  nearestExpiration,
+  normalizeContract,
+  normalizeQuote,
+  normalizeWatchlist,
+  watchlistSymbols,
+} from './market-data.js';
 import { asArray, asRecord, isoTimestamp, nested, num, str } from './shapes.js';
 import {
   assertTradable,
@@ -70,6 +85,9 @@ export const ROBINHOOD_READ_TOOLS = [
   'get_option_instruments',
   'get_option_quotes',
   'get_equity_orders',
+  'get_option_chains',
+  'get_watchlists',
+  'get_watchlist_items',
 ] as const;
 
 /**
@@ -91,6 +109,15 @@ const QUOTE_BATCH = 20;
 /** Pages guarded so a pagination bug can't spin forever. */
 const MAX_PAGES = 20;
 
+/**
+ * Strikes either side of spot to price by default.
+ *
+ * A liquid underlying lists hundreds of contracts per expiry and quoting them
+ * all costs one round trip per 20. Nobody reads a chain that far out; 25 each
+ * way covers what a screen shows with room to scroll.
+ */
+const STRIKE_WINDOW = 25;
+
 export interface RobinhoodBrokerOptions {
   /** A connected MCP client — see RobinhoodConnection.connect(). */
   client: Client;
@@ -108,7 +135,7 @@ export interface RobinhoodBrokerOptions {
   cache?: ToolCache | null;
 }
 
-export class RobinhoodBroker implements BrokerProvider, TradingProvider {
+export class RobinhoodBroker implements BrokerProvider, TradingProvider, MarketDataProvider {
   readonly name = 'robinhood';
   readonly isMock = false;
 
@@ -209,6 +236,137 @@ export class RobinhoodBroker implements BrokerProvider, TradingProvider {
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
     return params.limit ? orders.slice(0, params.limit) : orders;
+  }
+
+  // --- Market data -------------------------------------------------------
+
+  async getQuotes(symbols: string[]): Promise<Quote[]> {
+    const wanted = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))];
+    const quotes: Quote[] = [];
+
+    for (const batch of chunk(wanted, QUOTE_BATCH)) {
+      const raw = await this.read<unknown>('get_equity_quotes', { symbols: batch });
+      for (const entry of asArray(raw, 'results')) {
+        const quote = normalizeQuote(entry);
+        if (quote) quotes.push(quote);
+      }
+    }
+
+    return quotes;
+  }
+
+  async getOptionExpirations(symbol: string): Promise<string[]> {
+    const raw = await this.read<unknown>('get_option_chains', {
+      underlying_symbol: symbol.toUpperCase(),
+    });
+    return chainExpirations(raw, symbol);
+  }
+
+  /**
+   * A priced option chain for one expiration.
+   *
+   * Three calls joined: the chain gives expirations and a chain id, the
+   * instruments give contract definitions, and the quotes give prices and
+   * greeks. Robinhood returns greeks directly, so nothing here is modelled.
+   */
+  async getOptionChain(
+    symbol: string,
+    expiration?: string,
+    options: { strikeWindow?: number } = {},
+  ): Promise<OptionChain> {
+    const upper = symbol.toUpperCase();
+    const chainRaw = await this.read<unknown>('get_option_chains', {
+      underlying_symbol: upper,
+    });
+
+    const expirations = chainExpirations(chainRaw, upper);
+    const chainId = chainIdFor(chainRaw, upper);
+    const target =
+      expiration && expirations.includes(expiration)
+        ? expiration
+        : nearestExpiration(expirations, today());
+
+    const [underlying] = await this.getQuotes([upper]).catch(() => []);
+    const underlyingPrice = underlying?.price ?? null;
+
+    if (!chainId || !target) {
+      return { symbol: upper, expiration: target ?? '', expirations, underlyingPrice, contracts: [] };
+    }
+
+    const instruments = await this.paginate(
+      'get_option_instruments',
+      { chain_id: chainId, expiration_dates: target, state: 'active' },
+      'instruments',
+    );
+
+    // Quoting every contract is what makes a chain slow: a liquid underlying
+    // lists hundreds, and each batch of 20 is its own round trip. A chain is
+    // read around the money, so only that window is priced — the rest are
+    // returned as definitions with a null mark, which the UI already knows how
+    // to render as "no quote" rather than as free.
+    const ids = idsToQuote(instruments, underlyingPrice, options.strikeWindow ?? STRIKE_WINDOW);
+    const priced = await this.fetchContractQuotes(ids).catch(
+      () => new Map<string, { quote: Record<string, unknown>; close?: Record<string, unknown> }>(),
+    );
+
+    const contracts = instruments
+      .map((instrument) => {
+        const entry = priced.get(str(instrument, 'id') ?? '');
+        return normalizeContract(instrument, entry?.quote, entry?.close);
+      })
+      .filter((c): c is OptionContract => c !== null)
+      // Strike order, calls before puts — how an option chain is read.
+      .sort((a, b) => a.strike - b.strike || a.putCall.localeCompare(b.putCall));
+
+    return { symbol: upper, expiration: target, expirations, underlyingPrice, contracts };
+  }
+
+  async getWatchlists(): Promise<BrokerWatchlist[]> {
+    const raw = await this.read<unknown>('get_watchlists');
+    return asArray(raw, 'watchlists')
+      .map(normalizeWatchlist)
+      .filter((w): w is BrokerWatchlist => w !== null);
+  }
+
+  async getWatchlist(id: string): Promise<BrokerWatchlistDetail> {
+    const [lists, itemsRaw] = await Promise.all([
+      this.getWatchlists(),
+      this.read<unknown>('get_watchlist_items', { list_id: id }),
+    ]);
+
+    const meta = lists.find((l) => l.id === id);
+    const symbols = watchlistSymbols(asArray(itemsRaw, 'items'));
+
+    return {
+      id,
+      name: meta?.name ?? 'Watchlist',
+      ...(meta?.emoji ? { emoji: meta.emoji } : {}),
+      // The list's own count includes non-equity rows we filter out, so the
+      // resolved symbol count is the honest one.
+      symbolCount: symbols.length,
+      editable: meta?.editable ?? false,
+      symbols,
+    };
+  }
+
+  private async fetchContractQuotes(
+    ids: string[],
+  ): Promise<Map<string, { quote: Record<string, unknown>; close?: Record<string, unknown> }>> {
+    const byId = new Map<
+      string,
+      { quote: Record<string, unknown>; close?: Record<string, unknown> }
+    >();
+
+    for (const batch of chunk(ids, QUOTE_BATCH)) {
+      const raw = await this.read<unknown>('get_option_quotes', { instrument_ids: batch });
+      for (const entry of asArray(raw, 'results')) {
+        const quote = nested(entry, 'quote');
+        const id = str(quote, 'instrument_id');
+        if (id) byId.set(id, { quote, close: nested(entry, 'close') });
+      }
+    }
+
+    return byId;
   }
 
   /** Accounts Robinhood has flagged as agent-tradable — usually a strict subset. */
@@ -652,6 +810,50 @@ export function nextCursor(payload: Record<string, unknown>): string | undefined
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Contract ids worth quoting: those whose strike is within `window` strikes of
+ * spot, counted per side so a skewed ladder doesn't crowd out one direction.
+ *
+ * With no underlying price there is no "around the money", so everything is
+ * quoted rather than an arbitrary slice being chosen.
+ */
+export function idsToQuote(
+  instruments: Record<string, unknown>[],
+  underlyingPrice: number | null,
+  window: number,
+): string[] {
+  const idOf = (i: Record<string, unknown>) => str(i, 'id');
+
+  if (underlyingPrice === null || window <= 0) {
+    return instruments.map(idOf).filter((id): id is string => Boolean(id));
+  }
+
+  const strikes = [
+    ...new Set(
+      instruments
+        .map((i) => num(i, 'strike_price'))
+        .filter((s): s is number => s !== undefined),
+    ),
+  ].sort((a, b) => a - b);
+
+  const below = strikes.filter((s) => s <= underlyingPrice).slice(-window);
+  const above = strikes.filter((s) => s > underlyingPrice).slice(0, window);
+  const keep = new Set([...below, ...above]);
+
+  return instruments
+    .filter((i) => {
+      const strike = num(i, 'strike_price');
+      return strike !== undefined && keep.has(strike);
+    })
+    .map(idOf)
+    .filter((id): id is string => Boolean(id));
+}
+
+/** Today in ISO date form, for choosing the nearest un-expired expiration. */
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function chunk<T>(items: T[], size: number): T[][] {

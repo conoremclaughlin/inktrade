@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { redirectUriFor, robinhoodConnection } from '@/lib/robinhood';
+import { redirectUriFor, resetRobinhoodRuntime, robinhoodConnection } from '@/lib/robinhood';
 
 /** Link status, plus the URL to start authorization when not yet linked. */
 export async function GET(request: NextRequest) {
@@ -29,5 +29,8 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   await robinhoodConnection(request.url).unlink();
+  // Drop the shared session too, or the next request keeps using the token we
+  // just discarded.
+  resetRobinhoodRuntime();
   return NextResponse.json({ status: 'disconnected' });
 }
