@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/navbar';
+import { RobinhoodCard } from '@/components/settings/robinhood-card';
 import { useSchwabStatus, useSchwabConfigure, useSchwabDisconnect } from '@/lib/hooks';
 
 export default function SettingsPage() {
@@ -226,6 +227,8 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        <RobinhoodCard />
+
         {/* Current Provider Info */}
         <section className="mt-6 glass-bright rounded-xl border border-border-subtle overflow-hidden">
           <div className="px-6 py-4 border-b border-border-subtle">
@@ -265,12 +268,13 @@ function CallbackBanners() {
   useEffect(() => {
     // Drop the marker so a reload doesn't re-announce a link that already
     // happened, and so the URL is clean to share or bookmark.
-    if (linked === 'true') {
+    if (linked) {
       window.history.replaceState(null, '', '/settings');
     }
   }, [linked]);
 
-  if (linked === 'true') {
+  if (linked) {
+    const provider = linked === 'robinhood' ? 'Robinhood' : 'Schwab';
     return (
       <div className="mb-6 rounded-xl border border-emerald/30 bg-emerald/5 p-4">
         <div className="flex items-center gap-3">
@@ -280,8 +284,12 @@ function CallbackBanners() {
             </svg>
           </div>
           <div>
-            <p className="text-[14px] font-semibold text-emerald">Schwab Account Linked</p>
-            <p className="text-[12px] text-text-tertiary">Your account is connected and set as the active data provider.</p>
+            <p className="text-[14px] font-semibold text-emerald">{provider} Account Linked</p>
+            <p className="text-[12px] text-text-tertiary">
+              {linked === 'robinhood'
+                ? 'Reading positions, balances and order history. Inktrade never places orders.'
+                : 'Your account is connected and set as the active data provider.'}
+            </p>
           </div>
         </div>
       </div>
@@ -294,6 +302,7 @@ function CallbackBanners() {
         <p className="text-[13px] font-mono text-rose">
           {error === 'no_code' ? 'No authorization code received from Schwab.' :
            error === 'not_configured' ? 'Schwab credentials not configured. Add them below.' :
+           error === 'robinhood_denied' ? 'Robinhood declined the authorization request.' :
            decodeURIComponent(error)}
         </p>
       </div>

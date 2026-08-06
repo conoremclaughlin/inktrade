@@ -327,6 +327,40 @@ export function useSchwabDisconnect() {
   });
 }
 
+// --- Robinhood auth ---
+
+export interface RobinhoodStatus {
+  /** 'unavailable' means the loopback rule can't be satisfied from this origin. */
+  status: 'connected' | 'disconnected' | 'unavailable';
+  redirectUri?: string;
+  error?: string;
+}
+
+export function useRobinhoodStatus() {
+  return useQuery<RobinhoodStatus>({
+    queryKey: ['robinhood-status'],
+    // A 400 here is a real answer — the loopback guard reporting that this
+    // origin can never link — so it's read rather than thrown away.
+    queryFn: async () => {
+      const res = await fetch('/api/auth/robinhood');
+      return (await res.json()) as RobinhoodStatus;
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useRobinhoodDisconnect() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/auth/robinhood', { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to disconnect');
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['robinhood-status'] }),
+  });
+}
+
 // --- Portfolio analysis ---
 
 // --- Theta projection ---
