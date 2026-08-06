@@ -56,16 +56,30 @@ export interface OIStrike {
   putVolume: number;
 }
 
+/**
+ * Open interest by strike.
+ *
+ * Field names here were wrong for a long time — the type declared `maxPain`,
+ * `putCallRatio`, `expiry` and `expiries`; the route has always returned
+ * `maxPainStrike`, `pcRatio` and `expirations`. Web read the real names and was
+ * fine. Mobile trusted the type and crashed with "Cannot read property
+ * 'toFixed' of undefined" on every ticker.
+ *
+ * A shared type that doesn't match the endpoint is worse than no type: it
+ * turns a wrong field into a compile-time guarantee.
+ */
 export interface OIDistributionResponse {
   symbol: string;
-  expiry: string;
-  expiries: string[];
   underlyingPrice: number;
-  maxPain: number;
-  putCallRatio: number;
+  /** ISO dates (YYYY-MM-DD) for every expiration on the underlying. */
+  expirations: string[];
+  strikes: OIStrike[];
+  /** Strike where the most option value expires worthless. */
+  maxPainStrike: number;
   totalCallOI: number;
   totalPutOI: number;
-  strikes: OIStrike[];
+  /** Put open interest over call open interest. Zero when there are no calls. */
+  pcRatio: number;
 }
 
 export interface WatchlistResponse {

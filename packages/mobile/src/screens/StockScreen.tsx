@@ -28,7 +28,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Stock'>;
 
 const INDICATORS: IndicatorId[] = ['sma20', 'sma50', 'sma200', 'ema12', 'ema26', 'bollinger'];
 
-export function StockScreen({ route }: Props) {
+export function StockScreen({ route, navigation }: Props) {
   const { symbol } = route.params;
   const { width } = useWindowDimensions();
 
@@ -59,6 +59,26 @@ export function StockScreen({ route }: Props) {
             </Text>
           </View>
         )}
+      </View>
+
+      {/*
+        A ticker screen with no way to act on the ticker is a dead end — you
+        arrive from a watchlist, read the chart, and have to navigate back out
+        and re-type the symbol to do anything about it.
+      */}
+      <View style={styles.actions}>
+        <Pressable
+          onPress={() => navigation.navigate('Tabs', { screen: 'Chain', params: { symbol } })}
+          style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+        >
+          <Text style={styles.actionText}>Option chain</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => navigation.navigate('Tabs', { screen: 'Trade', params: { symbol } })}
+          style={({ pressed }) => [styles.action, styles.actionPrimary, pressed && styles.pressed]}
+        >
+          <Text style={[styles.actionText, styles.actionPrimaryText]}>Trade {symbol}</Text>
+        </Pressable>
       </View>
 
       <Chips
@@ -108,13 +128,13 @@ export function StockScreen({ route }: Props) {
         ) : (
           <>
             <View style={styles.oiMeta}>
-              <Meta label="Max pain" value={`$${Math.round(oi.data.maxPain)}`} />
-              <Meta label="P/C ratio" value={oi.data.putCallRatio.toFixed(2)} />
+              <Meta label="Max pain" value={`$${Math.round(oi.data.maxPainStrike)}`} />
+              <Meta label="P/C ratio" value={oi.data.pcRatio.toFixed(2)} />
             </View>
             <OIChart
               strikes={oi.data.strikes}
               underlyingPrice={oi.data.underlyingPrice}
-              maxPain={oi.data.maxPain}
+              maxPain={oi.data.maxPainStrike}
               width={width - spacing.lg * 2}
             />
           </>
@@ -199,6 +219,25 @@ const ErrorNote = ({ message }: { message: string }) => (
 );
 
 const styles = StyleSheet.create({
+  actions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  action: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 11,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+  },
+  actionPrimary: { borderColor: colors.accent, backgroundColor: 'rgba(59,130,246,0.16)' },
+  actionText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  actionPrimaryText: { color: colors.accentBright },
+  pressed: { opacity: 0.7 },
+
   container: { flex: 1, backgroundColor: colors.void },
   content: { paddingBottom: spacing.xxl },
 

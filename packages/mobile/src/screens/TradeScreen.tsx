@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useRoute, type RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import {
   COST_BASIS_LABELS,
   COST_BASIS_STRATEGIES,
@@ -21,7 +21,7 @@ import {
   type CostBasisStrategy,
   type Position,
 } from '@inktrade/client';
-import type { RootStackParamList } from '../navigation';
+import type { RootStackParamList, TabParamList } from '../navigation';
 import { usePortfolio } from '../hooks/usePortfolio';
 import {
   useBrokerQuotes,
@@ -34,7 +34,7 @@ import { ExerciseAdvisory } from '../components/ExerciseAdvisory';
 import { API_BASE_URL } from '../lib/api';
 import { colors, fonts, formatMoney, radii, spacing } from '../ui/theme';
 
-type TradeRoute = RouteProp<RootStackParamList, 'Trade'>;
+type TradeRoute = RouteProp<TabParamList, 'Trade'>;
 
 /**
  * Trading on mobile.
@@ -50,9 +50,30 @@ type TradeRoute = RouteProp<RootStackParamList, 'Trade'>;
  */
 export function TradeScreen() {
   const route = useRoute<TradeRoute>();
+  const navigation = useNavigation();
   const [symbol, setSymbol] = useState(route.params?.symbol?.toUpperCase() ?? 'SOXL');
   const [draft, setDraft] = useState(symbol);
   const [accountId, setAccountId] = useState<string | null>(null);
+
+
+  /**
+   * Follow a symbol handed over from another screen.
+   *
+   * Trade and Chain are TABS, so their state survives navigation — the
+   * useState initializer above runs once and never again. Without this,
+   * tapping a strike on the chain lands on a ticket for whatever ticker
+   * happened to be here already, which is a very bad way to be wrong.
+   *
+   * The param is cleared once consumed so arriving twice with the SAME symbol
+   * still registers as a change.
+   */
+  useEffect(() => {
+    const handedOver = route.params?.symbol?.toUpperCase();
+    if (!handedOver) return;
+    setSymbol(handedOver);
+    setDraft(handedOver);
+    navigation.setParams({ symbol: undefined });
+  }, [route.params?.symbol, navigation]);
 
   const portfolio = usePortfolio();
   const mode = useTradingMode();

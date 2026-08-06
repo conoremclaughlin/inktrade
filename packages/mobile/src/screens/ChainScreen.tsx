@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,16 +11,17 @@ import {
   type ViewToken,
 } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { OptionContract } from '@inktrade/client';
 import { useChainQuotes } from '@inktrade/client/hooks';
-import type { RootStackParamList } from '../navigation';
+import type { TabParamList } from '../navigation';
 import { useOptionChain } from '../hooks/useTrading';
 import { api } from '../lib/api';
 import { colors, fonts, formatMoney, radii, spacing } from '../ui/theme';
 
-type ChainRoute = RouteProp<RootStackParamList, 'Chain'>;
-type Nav = NativeStackNavigationProp<RootStackParamList>;
+type ChainRoute = RouteProp<TabParamList, 'Chain'>;
+// Chain and Trade are sibling tabs, so this navigates by bare name.
+type Nav = BottomTabNavigationProp<TabParamList>;
 
 /** One strike, with its call and put side by side. */
 interface StrikeRow {
@@ -48,6 +49,27 @@ export function ChainScreen() {
   const [symbol, setSymbol] = useState(route.params?.symbol?.toUpperCase() ?? 'MU');
   const [draft, setDraft] = useState(symbol);
   const [expiration, setExpiration] = useState<string | undefined>(undefined);
+
+
+  /**
+   * Follow a symbol handed over from another screen.
+   *
+   * Trade and Chain are TABS, so their state survives navigation — the
+   * useState initializer above runs once and never again. Without this,
+   * tapping a strike on the chain lands on a ticket for whatever ticker
+   * happened to be here already, which is a very bad way to be wrong.
+   *
+   * The param is cleared once consumed so arriving twice with the SAME symbol
+   * still registers as a change.
+   */
+  useEffect(() => {
+    const handedOver = route.params?.symbol?.toUpperCase();
+    if (!handedOver) return;
+    setSymbol(handedOver);
+    setDraft(handedOver);
+    setExpiration(undefined);
+    navigation.setParams({ symbol: undefined });
+  }, [route.params?.symbol, navigation]);
 
   const chain = useOptionChain(symbol, expiration);
   const contracts = useMemo(() => chain.data?.contracts ?? [], [chain.data]);
@@ -179,6 +201,15 @@ export function ChainScreen() {
       {chain.isLoading ? (
         <View style={styles.centered}>
           <ActivityIndicator color={colors.accent} />
+          {/*
+            A bare spinner is the wrong answer here. An uncached chain on a
+            wide underlying takes upwards of a minute upstream, and silence for
+            that long reads as a hang — people back out before it lands.
+          */}
+          <Text style={styles.loadingLabel}>Loading the {symbol} ladder</Text>
+          <Text style={styles.loadingNote}>
+            A ladder the app hasn&apos;t seen before can take a minute to arrive.
+          </Text>
         </View>
       ) : chain.error ? (
         <Text style={styles.empty}>Couldn&apos;t load the chain for {symbol}.</Text>
@@ -304,7 +335,15 @@ function daysTo(iso: string): string {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.void },
   pressed: { opacity: 0.65 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+  },
+  loadingLabel: { color: colors.textSecondary, fontSize: 13, marginTop: spacing.sm },
+  loadingNote: { color: colors.textMuted, fontSize: 11, textAlign: 'center', lineHeight: 16 },
 
   search: {
     flexDirection: 'row',
