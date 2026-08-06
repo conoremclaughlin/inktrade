@@ -2,7 +2,7 @@
   "name": "inktrade",
   "version": "0.1.0",
   "private": true,
-  "description": "Inktrade — collectible card game marketplace",
+  "description": "Inktrade — options trading intelligence platform",
   "workspaces": [
     "packages/*"
   ],
