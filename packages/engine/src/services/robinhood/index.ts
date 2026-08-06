@@ -1,4 +1,13 @@
-export { RobinhoodBroker, ROBINHOOD_READ_TOOLS, normalizeOrder, normalizePosition } from './broker.js';
+export {
+  RobinhoodBroker,
+  ROBINHOOD_READ_TOOLS,
+  currentEquityPrice,
+  nextCursor,
+  normalizeEquityPosition,
+  normalizeOptionDetail,
+  normalizeOptionPosition,
+  normalizeOrder,
+} from './broker.js';
 export type { RobinhoodBrokerOptions } from './broker.js';
 export {
   RobinhoodConnection,
