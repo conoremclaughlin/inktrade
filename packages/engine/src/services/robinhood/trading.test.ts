@@ -7,6 +7,7 @@ import {
   isAgenticAccount,
   normalizeReceipt,
   normalizeReview,
+  normalizeTaxLot,
   toRobinhoodType,
 } from './trading.js';
 
@@ -229,5 +230,134 @@ describe('normalizeReceipt', () => {
     expect(receipt.symbol).toBe('MU');
     expect(receipt.side).toBe('BUY');
     expect(receipt.quantity).toBe(2);
+  });
+});
+
+describe('normalizeTaxLot', () => {
+  it('reads a live lot', () => {
+    expect(
+      normalizeTaxLot({
+        open_lot_id: 'lot-1',
+        open_tran_type: 'buy',
+        quantity: '60.000000',
+        quantity_available: '60.000000',
+        is_selectable: true,
+        cost_per_share: '128.800000',
+        tax_cost_basis: '7727.980000',
+        open_date: '2026-07-31',
+        term: 'st',
+      }),
+    ).toEqual({
+      id: 'lot-1',
+      quantity: 60,
+      costPerShare: 128.8,
+      openDate: '2026-07-31',
+      term: 'SHORT',
+      selectable: true,
+      origin: 'BUY',
+    });
+  });
+
+  it('marks an assignment lot, which is the case lot selection exists for', () => {
+    // Shares delivered at a basis nobody chose.
+    expect(
+      normalizeTaxLot({
+        open_lot_id: 'lot-2',
+        open_tran_type: 'assignbuy',
+        quantity_available: '300',
+        is_selectable: true,
+        cost_per_share: '176.680000',
+        open_date: '2026-07-31',
+        term: 'st',
+      })?.origin,
+    ).toBe('ASSIGNMENT');
+  });
+
+  it('keeps a pending basis null rather than zero', () => {
+    // A zero basis would report the whole proceeds as gain.
+    const lot = normalizeTaxLot({
+      open_lot_id: 'lot-3',
+      quantity_available: '6',
+      is_selectable: false,
+      open_date: '2026-08-05',
+      term: 'st',
+    });
+    expect(lot?.costPerShare).toBeNull();
+    expect(lot?.selectable).toBe(false);
+  });
+
+  it('treats a missing is_selectable as not selectable', () => {
+    // Assuming selectable produces an order the broker rejects at submit.
+    expect(normalizeTaxLot({ open_lot_id: 'x', quantity: '1', open_date: '2026-01-01' })?.selectable)
+      .toBe(false);
+  });
+
+  it('prefers available quantity over total, since some may be held', () => {
+    expect(
+      normalizeTaxLot({
+        open_lot_id: 'x',
+        quantity: '100',
+        quantity_available: '40',
+        open_date: '2026-01-01',
+        is_selectable: true,
+      })?.quantity,
+    ).toBe(40);
+  });
+
+  it('reads long-term lots', () => {
+    expect(
+      normalizeTaxLot({ open_lot_id: 'x', quantity: '1', open_date: '2025-01-01', term: 'lt' })?.term,
+    ).toBe('LONG');
+  });
+});
+
+describe('tax lots on an order', () => {
+  const sell: OrderRequest = {
+    accountId: '859249179',
+    symbol: 'SOXL',
+    side: 'SELL',
+    type: 'LIMIT',
+    quantity: 100,
+    limitPrice: 131.6,
+  };
+
+  it('sends the chosen lots', () => {
+    const args = buildOrderArgs({
+      ...sell,
+      taxLots: [{ lotId: 'a', quantity: 60 }, { lotId: 'b', quantity: 40 }],
+    });
+    expect(args.tax_lots).toEqual([
+      { open_lot_id: 'a', quantity: '60' },
+      { open_lot_id: 'b', quantity: '40' },
+    ]);
+  });
+
+  it('omits the field entirely when no lots were chosen', () => {
+    // Absent means the broker default, which is FIFO.
+    expect(buildOrderArgs(sell).tax_lots).toBeUndefined();
+  });
+
+  it('refuses a selection that does not sum to the order quantity', () => {
+    // A mismatch means the selection is stale — shares moved since it was made.
+    expect(() =>
+      buildOrderArgs({ ...sell, taxLots: [{ lotId: 'a', quantity: 60 }] }),
+    ).toThrow(/total 60 shares but the order is for 100/);
+  });
+
+  it('refuses more lots than the broker accepts', () => {
+    const many = Array.from({ length: 31 }, (_, i) => ({ lotId: `l${i}`, quantity: 100 / 31 }));
+    expect(() => buildOrderArgs({ ...sell, taxLots: many })).toThrow(/At most 30 lots/);
+  });
+
+  it.each([
+    [{ side: 'BUY' as const }, /sells only/i],
+    [{ type: 'STOP' as const, stopPrice: 120 }, /stop orders/i],
+    [{ session: 'ALL_DAY' as const }, /overnight/i],
+  ])('refuses lot selection on an order shape the broker rejects: %o', (over, pattern) => {
+    // Better here than as a rejection at submit, after the user has already
+    // reviewed a realized-gain figure.
+    expect(() =>
+      buildOrderArgs({ ...sell, ...over, taxLots: [{ lotId: 'a', quantity: 100 }] }),
+    ).toThrow(pattern);
   });
 });

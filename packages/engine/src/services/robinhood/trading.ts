@@ -18,6 +18,7 @@
  * only want to have once.
  */
 
+import { MAX_SELECTED_LOTS, lotSelectionBlocker } from '@inktrade/client';
 import type {
   OrderRequest,
   OrderReceipt,
@@ -26,7 +27,50 @@ import type {
   OrderStatus,
   OrderType,
 } from '@inktrade/client/broker';
+import type { TaxLot } from '@inktrade/client';
 import { asRecord, num, str } from './shapes.js';
+
+/**
+ * Normalize a Robinhood tax lot.
+ *
+ * Two fields decide whether a lot is usable and both are easy to fumble:
+ *
+ *   - `is_selectable` is false while a lot is still syncing, typically because
+ *     it was acquired today. Offering it produces an order the broker rejects
+ *     at submit.
+ *   - `cost_per_share` is absent while the basis is pending. Robinhood's own
+ *     guidance is to say so rather than treat it as zero — a zero basis would
+ *     report the entire proceeds as gain.
+ */
+export function normalizeTaxLot(raw: Record<string, unknown>): TaxLot | null {
+  const id = str(raw, 'open_lot_id');
+  const quantity = num(raw, 'quantity_available', 'quantity');
+  const openDate = str(raw, 'open_date');
+  if (!id || quantity === undefined || !openDate) return null;
+
+  return {
+    id,
+    quantity,
+    costPerShare: num(raw, 'cost_per_share') ?? null,
+    openDate: openDate.slice(0, 10),
+    term: str(raw, 'term')?.toLowerCase() === 'lt' ? 'LONG' : 'SHORT',
+    selectable: raw.is_selectable === true,
+    origin: originOf(str(raw, 'open_tran_type')),
+  };
+}
+
+/**
+ * Where a lot came from.
+ *
+ * Assignment lots are worth distinguishing: they arrive at a basis nobody
+ * chose, which is exactly the case specified-lot selling is for.
+ */
+function originOf(tranType: string | undefined): TaxLot['origin'] {
+  const value = tranType?.toLowerCase() ?? '';
+  if (value.includes('assign')) return 'ASSIGNMENT';
+  if (value.includes('buy')) return 'BUY';
+  return 'OTHER';
+}
 
 /** Thrown before anything is sent. Never means "the broker refused". */
 export class OrderRejectedError extends Error {
@@ -118,6 +162,50 @@ export function buildOrderArgs(request: OrderRequest): Record<string, unknown> {
     time_in_force: request.timeInForce === 'GTC' ? 'gtc' : 'gfd',
     market_hours: toMarketHours(session),
     ...(request.clientOrderId ? { ref_id: request.clientOrderId } : {}),
+    ...taxLotArgs(request),
+  };
+}
+
+/**
+ * Specified-lot selling, when the caller chose lots.
+ *
+ * Validated here rather than left to the broker, because a rejection at submit
+ * after the user reviewed a realized-gain figure is the worst possible moment
+ * to discover the selection was never going to be accepted.
+ */
+function taxLotArgs(request: OrderRequest): Record<string, unknown> {
+  const lots = request.taxLots;
+  if (!lots || lots.length === 0) return {};
+
+  const blocker = lotSelectionBlocker({
+    side: request.side,
+    type: request.type,
+    notional: request.notional,
+    session: request.session,
+    quantity: request.quantity,
+  });
+  if (blocker) throw new OrderRejectedError(blocker);
+
+  if (lots.length > MAX_SELECTED_LOTS) {
+    throw new OrderRejectedError(
+      `At most ${MAX_SELECTED_LOTS} lots can be specified on one order; ${lots.length} were chosen.`,
+    );
+  }
+
+  const total = lots.reduce((sum, lot) => sum + lot.quantity, 0);
+  // The broker requires the lot quantities to sum to the order quantity. A
+  // mismatch means the selection is stale — shares moved since it was made.
+  if (request.quantity !== undefined && Math.abs(total - request.quantity) > 1e-6) {
+    throw new OrderRejectedError(
+      `Selected lots total ${total} shares but the order is for ${request.quantity}.`,
+    );
+  }
+
+  return {
+    tax_lots: lots.map((lot) => ({
+      open_lot_id: lot.lotId,
+      quantity: String(lot.quantity),
+    })),
   };
 }
 

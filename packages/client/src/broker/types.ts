@@ -8,6 +8,7 @@
  */
 
 import type { Quote } from '../types.js';
+import type { TaxLot } from '../tax-lots.js';
 
 export type AssetType = 'EQUITY' | 'ETF' | 'OPTION' | 'CASH';
 
@@ -233,6 +234,11 @@ export interface OrderRequest {
    * have reached the broker, so a network failure can't place a second order.
    */
   clientOrderId?: string;
+  /**
+   * Specific lots to sell. Omitting this means the broker's default, which is
+   * FIFO — rarely what anyone wants and never what anyone was asked.
+   */
+  taxLots?: { lotId: string; quantity: number }[];
 }
 
 /** A pre-trade check: what it would cost and what the broker objects to. */
@@ -265,6 +271,8 @@ export interface OrderReceipt {
 export interface TradingProvider {
   /** Accounts this provider is permitted to trade in. Often a subset. */
   tradableAccountIds(): Promise<string[]>;
+  /** Open lots for one holding, for specified-lot selling. */
+  getTaxLots(accountId: string, symbol: string): Promise<TaxLot[]>;
   reviewOrder(request: OrderRequest): Promise<OrderReview>;
   placeOrder(request: OrderRequest): Promise<OrderReceipt>;
   cancelOrder(accountId: string, orderId: string): Promise<void>;

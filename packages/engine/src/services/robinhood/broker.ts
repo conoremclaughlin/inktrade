@@ -52,7 +52,7 @@ import type {
   Position,
   TradingProvider,
 } from '@inktrade/client/broker';
-import type { Quote } from '@inktrade/client';
+import type { Quote, TaxLot } from '@inktrade/client';
 import type { Client } from '@modelcontextprotocol/client';
 import { randomUUID } from 'node:crypto';
 import { callToolJson } from '../mcp/tools.js';
@@ -73,6 +73,7 @@ import {
   isAgenticAccount,
   normalizeReceipt,
   normalizeReview,
+  normalizeTaxLot,
 } from './trading.js';
 
 /** Read tools. Enumerated so a live smoke test can assert the server has them. */
@@ -88,6 +89,7 @@ export const ROBINHOOD_READ_TOOLS = [
   'get_option_chains',
   'get_watchlists',
   'get_watchlist_items',
+  'get_equity_tax_lots',
 ] as const;
 
 /**
@@ -416,6 +418,16 @@ export class RobinhoodBroker implements BrokerProvider, TradingProvider, MarketD
       .filter(isAgenticAccount)
       .map((raw) => accountNumberOf(raw))
       .filter((id): id is string => Boolean(id));
+  }
+
+  /** Open lots for one holding, newest first as Robinhood returns them. */
+  async getTaxLots(accountId: string, symbol: string): Promise<TaxLot[]> {
+    const raw = await this.paginate(
+      'get_equity_tax_lots',
+      { account_number: accountId, symbol: symbol.toUpperCase() },
+      'tax_lots',
+    );
+    return raw.map(normalizeTaxLot).filter((lot): lot is TaxLot => lot !== null);
   }
 
   /**
