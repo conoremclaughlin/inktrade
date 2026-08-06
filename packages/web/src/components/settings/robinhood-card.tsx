@@ -77,8 +77,9 @@ export function RobinhoodCard() {
         )}
 
         {/*
-          Stated up front rather than buried: the same grant that reads a
-          portfolio can also place orders, and it matters that we don't.
+          Stated up front rather than buried, and kept accurate: this said
+          "read-only, never places orders" after order placement had shipped.
+          A security claim that has quietly become false is worse than none.
         */}
         {!isLoading && !isUnavailable && (
           <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-border-subtle bg-surface/50 px-3 py-2.5">
@@ -98,7 +99,8 @@ export function RobinhoodCard() {
               />
             </svg>
             <p className="text-[12px] text-text-tertiary">
-              Read-only. Inktrade never places or cancels orders.
+              Everything you see is read-only. Orders are possible only in accounts
+              Robinhood has marked agent-enabled, and never without your confirmation.
             </p>
           </div>
         )}
