@@ -251,3 +251,84 @@ describe('the read path over a real connection', () => {
     expect(server!.callsTo('get_option_quotes')).toHaveLength(0);
   });
 });
+
+describe('caching over a real MCP connection', () => {
+  const readTools = {
+    get_portfolio: { data: { total_value: '100.00', cash: '100.00' }, guide: '' },
+    get_equity_positions: { data: { positions: [] }, guide: '' },
+    get_option_positions: { data: { positions: [] }, guide: '' },
+    get_equity_quotes: { data: { results: [] }, guide: '' },
+    get_option_instruments: { data: { instruments: [] }, guide: '' },
+    get_option_quotes: { data: { results: [] }, guide: '' },
+  };
+
+  it('does not re-issue tool calls for a repeated read', async () => {
+    const b = await broker(readTools);
+    await b.getPortfolio();
+    const first = server!.calls.length;
+    await b.getPortfolio();
+
+    expect(first).toBeGreaterThan(0);
+    expect(server!.calls.length).toBe(first);
+  });
+
+  it('coalesces concurrent reads into a single set of calls', async () => {
+    const b = await broker(readTools);
+    await Promise.all([b.getPortfolio(), b.getPortfolio(), b.getPortfolio()]);
+
+    // Every account is read once despite three overlapping callers.
+    expect(server!.callsTo('get_accounts')).toHaveLength(1);
+    expect(server!.callsTo('get_portfolio')).toHaveLength(2);
+  });
+
+  it('re-reads positions after an order, since a fill changes them', async () => {
+    const b = await broker(readTools);
+    await b.getPortfolio();
+    const before = server!.callsTo('get_equity_positions').length;
+
+    await b.placeOrder(order);
+    await b.getPortfolio();
+
+    expect(server!.callsTo('get_equity_positions').length).toBeGreaterThan(before);
+  });
+
+  it('keeps immutable contract definitions cached across a trade', async () => {
+    // Placing an order cannot change a contract's strike or expiry, so
+    // invalidating those would be pure waste on the largest batch we make.
+    const b = await broker({
+      ...readTools,
+      get_option_positions: {
+        data: {
+          positions: [
+            {
+              option_id: 'opt-1',
+              chain_symbol: 'MU',
+              type: 'long',
+              quantity: '1',
+              average_price: '100',
+              trade_value_multiplier: '100',
+            },
+          ],
+        },
+        guide: '',
+      },
+    });
+
+    await b.getPortfolio();
+    const before = server!.callsTo('get_option_instruments').length;
+    await b.placeOrder(order);
+    await b.getPortfolio();
+
+    expect(before).toBeGreaterThan(0);
+    expect(server!.callsTo('get_option_instruments')).toHaveLength(before);
+  });
+
+  it('never serves a trading call from cache', async () => {
+    const b = await broker();
+    await b.reviewOrder(order);
+    await b.reviewOrder(order);
+    // Two identical reviews must both reach the broker — a cached quote or
+    // buying-power check would be a stale answer to a money question.
+    expect(server!.callsTo('review_equity_order')).toHaveLength(2);
+  });
+});

@@ -50,6 +50,7 @@ import type {
 import type { Client } from '@modelcontextprotocol/client';
 import { randomUUID } from 'node:crypto';
 import { callToolJson } from '../mcp/tools.js';
+import { ToolCache } from '../mcp/cache.js';
 import { asArray, asRecord, isoTimestamp, nested, num, str } from './shapes.js';
 import {
   assertTradable,
@@ -100,6 +101,11 @@ export interface RobinhoodBrokerOptions {
    * cost of unlabelled option rows — worth it only for a value-total view.
    */
   resolveOptionDetail?: boolean;
+  /**
+   * Cache tool responses. Supply a shared instance to reuse immutable data —
+   * contract definitions especially — across requests. Pass null to disable.
+   */
+  cache?: ToolCache | null;
 }
 
 export class RobinhoodBroker implements BrokerProvider, TradingProvider {
@@ -108,10 +114,38 @@ export class RobinhoodBroker implements BrokerProvider, TradingProvider {
 
   private readonly client: Client;
   private readonly resolveOptionDetail: boolean;
+  private readonly cache: ToolCache | null;
 
   constructor(options: RobinhoodBrokerOptions) {
     this.client = options.client;
     this.resolveOptionDetail = options.resolveOptionDetail ?? true;
+    this.cache = options.cache === undefined ? new ToolCache() : options.cache;
+  }
+
+  /**
+   * Every read goes through here so caching and coalescing are automatic
+   * rather than something each call site has to remember.
+   */
+  private read<T>(tool: string, args: Record<string, unknown> = {}): Promise<T> {
+    const load = () => callToolJson<T>(this.client, tool, args);
+    return this.cache ? this.cache.resolve(tool, args, load) : load();
+  }
+
+  /**
+   * Forget what an order just made stale.
+   *
+   * Holdings, balances and order history all change on a fill; contract
+   * definitions and the account list do not, so those are left alone.
+   */
+  private invalidateAfterTrade(): void {
+    for (const tool of [
+      'get_portfolio',
+      'get_equity_positions',
+      'get_option_positions',
+      'get_equity_orders',
+    ]) {
+      this.cache?.invalidate(tool);
+    }
   }
 
   async getPortfolio(): Promise<PortfolioSummary> {
@@ -167,7 +201,7 @@ export class RobinhoodBroker implements BrokerProvider, TradingProvider {
     if (accountNumber) args.account_number = accountNumber;
     if (params.symbol) args.symbol = params.symbol.toUpperCase();
 
-    const raw = await callToolJson<unknown>(this.client, 'get_equity_orders', args);
+    const raw = await this.read<unknown>('get_equity_orders', args);
 
     const orders = asArray(raw, 'orders')
       .map(normalizeOrder)
@@ -216,10 +250,12 @@ export class RobinhoodBroker implements BrokerProvider, TradingProvider {
     });
     assertTradable(request.accountId, await this.tradableAccountIds());
 
-    return normalizeReceipt(
+    const receipt = normalizeReceipt(
       await callToolJson<unknown>(this.client, 'place_equity_order', args),
       request,
     );
+    this.invalidateAfterTrade();
+    return receipt;
   }
 
   async cancelOrder(accountId: string, orderId: string): Promise<void> {
@@ -228,20 +264,18 @@ export class RobinhoodBroker implements BrokerProvider, TradingProvider {
       account_number: accountId,
       order_id: orderId,
     });
+    this.invalidateAfterTrade();
   }
 
   private async accounts(): Promise<Record<string, unknown>[]> {
-    return asArray(
-      await callToolJson<unknown>(this.client, 'get_accounts'),
-      'accounts',
-    ).filter(isUsableAccount);
+    return asArray(await this.read<unknown>('get_accounts'), 'accounts').filter(isUsableAccount);
   }
 
   private async loadAccount(raw: Record<string, unknown>): Promise<BrokerageAccount> {
     const accountNumber = accountNumberOf(raw) ?? '';
 
     const [portfolioRaw, equityRaw, optionRaw] = await Promise.all([
-      callToolJson<unknown>(this.client, 'get_portfolio', { account_number: accountNumber }),
+      this.read<unknown>('get_portfolio', { account_number: accountNumber }),
       this.paginate('get_equity_positions', { account_number: accountNumber }, 'positions'),
       this.paginate(
         'get_option_positions',
@@ -312,9 +346,7 @@ export class RobinhoodBroker implements BrokerProvider, TradingProvider {
     const marks = new Map<string, Mark>();
 
     for (const batch of chunk(symbols, QUOTE_BATCH)) {
-      const raw = await callToolJson<unknown>(this.client, 'get_equity_quotes', {
-        symbols: batch,
-      });
+      const raw = await this.read<unknown>('get_equity_quotes', { symbols: batch });
 
       for (const entry of asArray(raw, 'results')) {
         const quote = nested(entry, 'quote');
@@ -340,9 +372,7 @@ export class RobinhoodBroker implements BrokerProvider, TradingProvider {
     const marks = new Map<string, Mark>();
 
     for (const batch of chunk(ids, QUOTE_BATCH)) {
-      const raw = await callToolJson<unknown>(this.client, 'get_option_quotes', {
-        instrument_ids: batch,
-      });
+      const raw = await this.read<unknown>('get_option_quotes', { instrument_ids: batch });
 
       for (const entry of asArray(raw, 'results')) {
         const quote = nested(entry, 'quote');
@@ -364,9 +394,7 @@ export class RobinhoodBroker implements BrokerProvider, TradingProvider {
     const details = new Map<string, OptionDetail>();
 
     for (const batch of chunk(ids, QUOTE_BATCH)) {
-      const raw = await callToolJson<unknown>(this.client, 'get_option_instruments', {
-        ids: batch.join(','),
-      });
+      const raw = await this.read<unknown>('get_option_instruments', { ids: batch.join(',') });
 
       for (const instrument of asArray(raw, 'instruments')) {
         const id = str(instrument, 'id');
@@ -388,10 +416,7 @@ export class RobinhoodBroker implements BrokerProvider, TradingProvider {
     let cursor: string | undefined;
 
     for (let page = 0; page < MAX_PAGES; page++) {
-      const raw = await callToolJson<unknown>(this.client, tool, {
-        ...args,
-        ...(cursor ? { cursor } : {}),
-      });
+      const raw = await this.read<unknown>(tool, { ...args, ...(cursor ? { cursor } : {}) });
 
       all.push(...asArray(raw, key));
 
