@@ -39,22 +39,29 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Hoisted so a broker rejection still returns it. The plan is computed from
+  // our own lot data, so it stays true and useful even when the order itself
+  // is refused — and which shares would have been sold is exactly what someone
+  // wants to see while fixing whatever the broker objected to.
+  let plan: SalePlan | undefined;
+
   try {
     const broker = await robinhoodBroker(request.url);
     if (!broker) return disconnected();
 
-    const { order: priced, plan } = await applyCostBasis(broker, order, request);
+    const applied = await applyCostBasis(broker, order, request);
+    plan = applied.plan;
 
     if (review) {
-      return NextResponse.json({ review: await broker.reviewOrder(priced), plan });
+      return NextResponse.json({ review: await broker.reviewOrder(applied.order), plan });
     }
-    return NextResponse.json({ receipt: await broker.placeOrder(priced), plan });
+    return NextResponse.json({ receipt: await broker.placeOrder(applied.order), plan });
   } catch (err) {
     // Order rejections are the caller's to fix — a bad quantity, a forbidden
     // account — so they read as 400 rather than an upstream failure.
     const message = (err as Error).message;
     if ((err as Error).name === 'OrderRejectedError') {
-      return NextResponse.json({ error: message }, { status: 400 });
+      return NextResponse.json({ error: message, plan }, { status: 400 });
     }
     return brokerError(err);
   }

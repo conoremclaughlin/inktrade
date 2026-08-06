@@ -68,6 +68,18 @@ export function normalizeQuote(entry: Record<string, unknown>): Quote | null {
     low: 0,
     open: 0,
     previousClose,
+    // Top of book, when the venue is quoting one. Omitted rather than zeroed:
+    // an order ticket offering a $0.00 bid would be worse than offering none.
+    ...spread(quote),
+  };
+}
+
+function spread(quote: Record<string, unknown>): { bid?: number; ask?: number } {
+  const bid = num(quote, 'bid_price');
+  const ask = num(quote, 'ask_price');
+  return {
+    ...(bid !== undefined && bid > 0 ? { bid } : {}),
+    ...(ask !== undefined && ask > 0 ? { ask } : {}),
   };
 }
 

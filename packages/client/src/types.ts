@@ -16,6 +16,13 @@ export interface Quote {
   open: number;
   previousClose: number;
   marketCap?: number;
+  /**
+   * Top of book. Optional because not every source quotes both sides, and an
+   * order ticket must show a blank rather than a fabricated price — undefined
+   * reads as "unknown", a zero reads as "free".
+   */
+  bid?: number;
+  ask?: number;
 }
 
 export interface QuotesResponse {

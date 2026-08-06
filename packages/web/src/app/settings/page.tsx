@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/navbar';
 import { RobinhoodCard } from '@/components/settings/robinhood-card';
+import { TradingCard } from '@/components/settings/trading-card';
 import { useSchwabStatus, useSchwabConfigure, useSchwabDisconnect } from '@/lib/hooks';
 
 export default function SettingsPage() {
@@ -228,6 +229,8 @@ export default function SettingsPage() {
         </section>
 
         <RobinhoodCard />
+
+        <TradingCard />
 
         {/* Current Provider Info */}
         <section className="mt-6 glass-bright rounded-xl border border-border-subtle overflow-hidden">
