@@ -108,8 +108,18 @@ export interface OrderActivity {
   price: number | null;
   /** ISO timestamp of the fill, or of submission when unfilled. */
   timestamp: string;
-  /** Present for option orders — lets the UI show strike and expiry. */
+  /**
+   * Present for option orders — lets the UI show strike and expiry.
+   *
+   * For a multi-leg strategy this is the FIRST leg. See `strategy` and
+   * `legCount`, which exist so the UI can say "short put spread, 2 legs"
+   * rather than presenting one leg of a spread as the whole trade.
+   */
   option?: OptionDetail;
+  /** The broker's name for a strategy, e.g. "short_put_spread". */
+  strategy?: string;
+  /** Number of legs. Absent for a single-leg or equity order. */
+  legCount?: number;
 }
 
 /**

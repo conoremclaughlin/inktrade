@@ -66,7 +66,7 @@ import {
   normalizeWatchlist,
   watchlistSymbols,
 } from './market-data.js';
-import { asArray, asRecord, isoTimestamp, nested, num, str } from './shapes.js';
+import { asArray, asRecord, isRecord, isoTimestamp, nested, num, str } from './shapes.js';
 import {
   assertTradable,
   buildOrderArgs,
@@ -86,6 +86,7 @@ export const ROBINHOOD_READ_TOOLS = [
   'get_option_instruments',
   'get_option_quotes',
   'get_equity_orders',
+  'get_option_orders',
   'get_option_chains',
   'get_watchlists',
   'get_watchlist_items',
@@ -172,6 +173,7 @@ export class RobinhoodBroker implements BrokerProvider, TradingProvider, MarketD
       'get_equity_positions',
       'get_option_positions',
       'get_equity_orders',
+      'get_option_orders',
     ]) {
       this.cache?.invalidate(tool);
     }
@@ -228,13 +230,25 @@ export class RobinhoodBroker implements BrokerProvider, TradingProvider, MarketD
     const args: Record<string, unknown> = {};
     const accountNumber = accountNumberOf(accounts[0]);
     if (accountNumber) args.account_number = accountNumber;
-    if (params.symbol) args.symbol = params.symbol.toUpperCase();
 
-    const raw = await this.read<unknown>('get_equity_orders', args);
+    // Equity and option orders are separate tools, and an activity feed that
+    // only fetched one of them silently hid every option trade — which, on a
+    // book that is mostly spreads, is most of the history.
+    const [equityRaw, optionRaw] = await Promise.all([
+      this.read<unknown>('get_equity_orders', {
+        ...args,
+        ...(params.symbol ? { symbol: params.symbol.toUpperCase() } : {}),
+      }),
+      // The option tool filters by chain id, not symbol, so a symbol filter is
+      // applied below rather than sent.
+      this.read<unknown>('get_option_orders', args).catch(() => null),
+    ]);
 
-    const orders = asArray(raw, 'orders')
+    const wanted = params.symbol?.toUpperCase();
+    const orders = [...asArray(equityRaw, 'orders'), ...asArray(optionRaw, 'orders')]
       .map(normalizeOrder)
       .filter((o): o is OrderActivity => o !== null)
+      .filter((o) => !wanted || o.symbol === wanted)
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
     return params.limit ? orders.slice(0, params.limit) : orders;
@@ -800,37 +814,105 @@ export function normalizeOptionDetail(
   };
 }
 
+/**
+ * One order, equity or option.
+ *
+ * Shaped against captured responses after the first version — written from the
+ * shape of the equity payload alone — turned out to mislabel every option order
+ * as an equity one. The two differ more than they look:
+ *
+ *   equity: { symbol, quantity, cumulative_quantity, price, average_price }
+ *   option: { chain_symbol, quantity, price, average_price: null,
+ *             legs: [{ option_id, side, expiration_date, strike_price,
+ *                      option_type, executions: [...] }] }
+ *
+ * An option order has no `option` object at all — the contract lives on the
+ * legs. Reading `raw.option` found nothing, so `assetType` fell through to
+ * EQUITY and every option order rendered without a strike or an expiry.
+ */
 export function normalizeOrder(raw: Record<string, unknown>): OrderActivity | null {
   const symbol = symbolOf(raw);
   const id = str(raw, 'id', 'order_id', 'ref_id');
   if (!symbol || !id) return null;
 
+  const legs = Array.isArray(raw.legs) ? raw.legs.filter(isRecord) : [];
+  const legDetail = legs[0] ? normalizeOptionDetail(legs[0]) : undefined;
+
   const timestamp =
     isoTimestamp(str(raw, 'last_transaction_at', 'executed_at', 'filled_at')) ??
+    // Options often carry a null last_transaction_at; the execution knows when.
+    executionTime(legs) ??
     isoTimestamp(str(raw, 'created_at', 'updated_at', 'timestamp'));
   if (!timestamp) return null;
 
-  const price = num(raw, 'average_price', 'price', 'executed_price');
-  const legDetail = normalizeOptionDetail(nested(raw, 'option'));
+  const status = normalizeStatus(str(raw, 'state', 'status'));
+  const strategy = str(raw, 'opening_strategy', 'closing_strategy');
 
   return {
     id,
     symbol,
     assetType: legDetail ? 'OPTION' : 'EQUITY',
-    side: normalizeSide(str(raw, 'side', 'direction', 'transaction_type')),
-    status: normalizeStatus(str(raw, 'state', 'status')),
-    quantity: num(raw, 'filled_quantity', 'cumulative_quantity', 'quantity') ?? 0,
-    // Null rather than 0 while unfilled — an unfilled order has no fill price,
-    // and zero would render as a free trade.
-    price: price ?? null,
+    side: normalizeSide(str(raw, 'side', 'direction', 'transaction_type'), legs),
+    status,
+    // What was ordered, not what filled — `status` already says how far it got,
+    // and a cancelled order reporting 0 shares loses what was attempted.
+    quantity: num(raw, 'quantity', 'cumulative_quantity', 'processed_quantity') ?? 0,
+    price: fillPrice(raw, status),
     timestamp,
     ...(legDetail
       ? { option: { ...legDetail, underlyingSymbol: legDetail.underlyingSymbol || symbol } }
       : {}),
+    ...(strategy ? { strategy } : {}),
+    ...(legs.length > 1 ? { legCount: legs.length } : {}),
   };
 }
 
-function normalizeSide(value: string | undefined): OrderSide {
+/**
+ * What was actually paid, or null.
+ *
+ * `price` is the LIMIT — the price asked for, not the price got — so returning
+ * it for an unfilled order makes a cancelled trade look like a completed one.
+ * A $1.00 limit on F that never filled was reporting a $1.00 fill.
+ *
+ * But options come back with `average_price: null` even when filled, and there
+ * the fill price IS `price`. So the rule is about state, not field name: a fill
+ * price exists once something has filled, and not before.
+ */
+function fillPrice(raw: Record<string, unknown>, status: OrderStatus): number | null {
+  if (status !== 'FILLED' && status !== 'PARTIAL') return null;
+  return num(raw, 'average_price', 'executed_price', 'price') ?? null;
+}
+
+/** Earliest execution across the legs — options timestamp their fills there. */
+function executionTime(legs: Record<string, unknown>[]): string | undefined {
+  const stamps = legs
+    .flatMap((leg) => (Array.isArray(leg.executions) ? leg.executions.filter(isRecord) : []))
+    .map((execution) => isoTimestamp(str(execution, 'timestamp')))
+    .filter((t): t is string => Boolean(t))
+    .sort();
+  return stamps[0];
+}
+
+/**
+ * Which way the order went.
+ *
+ * Equity orders say `side`. Option orders say `direction` — but 'debit' and
+ * 'credit' describe cash flow, not direction, and neither starts with 's', so
+ * every option order read as a BUY. A spread's direction comes from its legs;
+ * for a single leg that leg's side IS the answer.
+ */
+function normalizeSide(
+  value: string | undefined,
+  legs: Record<string, unknown>[] = [],
+): OrderSide {
+  const legSide = legs.length === 1 ? str(legs[0], 'side') : undefined;
+  if (legSide) return legSide.toLowerCase().startsWith('s') ? 'SELL' : 'BUY';
+
+  // A credit strategy is one you were paid for — a sale, in the sense that
+  // matters on an activity row.
+  if (value?.toLowerCase() === 'credit') return 'SELL';
+  if (value?.toLowerCase() === 'debit') return 'BUY';
+
   return value?.toLowerCase().startsWith('s') ? 'SELL' : 'BUY';
 }
 

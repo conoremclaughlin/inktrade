@@ -485,3 +485,144 @@ describe('loopback guard', () => {
     expect(() => assertLoopback('https://inktrade.vercel.app/cb')).toThrow(/loopback/i);
   });
 });
+
+/**
+ * Captured live on 2026-08-06. The first version of normalizeOrder was written
+ * from the equity shape alone and mislabelled every option order.
+ */
+const LIVE_EQUITY_ORDER = {
+  id: '6a7507e6-336a-4093-a796-2ad80e1d7f81',
+  symbol: 'F',
+  side: 'buy',
+  type: 'limit',
+  state: 'cancelled',
+  quantity: '1.000000',
+  cumulative_quantity: '0.000000',
+  price: '1.000000',
+  average_price: null,
+  time_in_force: 'gfd',
+  placed_agent: 'agentic',
+  created_at: '2026-08-06T22:17:10.932921Z',
+  last_transaction_at: '2026-08-06T22:17:30.371937Z',
+  executions: [],
+};
+
+const LIVE_OPTION_ORDER = {
+  id: '6a231de4-4790-42a2-bdc8-e417bc7308ff',
+  chain_symbol: 'MU',
+  state: 'filled',
+  quantity: '1.00000',
+  price: '85.00000000',
+  average_price: null,
+  premium: '8500.00000000',
+  direction: 'debit',
+  opening_strategy: 'long_call',
+  closing_strategy: null,
+  created_at: '2026-06-05T19:05:00.000000Z',
+  last_transaction_at: null,
+  legs: [
+    {
+      id: 'leg-1',
+      option_id: 'a84b2927-815d-4b50-9024-7100c0ddab7c',
+      side: 'buy',
+      position_effect: 'open',
+      ratio_quantity: 1,
+      expiration_date: '2026-09-18',
+      strike_price: '1250.0000',
+      option_type: 'call',
+      executions: [
+        { id: 'x1', price: '85.00000000', quantity: '1.00000', timestamp: '2026-06-05T19:05:09.083000Z' },
+      ],
+    },
+  ],
+};
+
+const LIVE_SPREAD_ORDER = {
+  id: '6a74e788-558d-4ded-88d0-301267bb33e2',
+  chain_symbol: 'NBIS',
+  state: 'filled',
+  quantity: '5.00000',
+  price: '2.80000000',
+  average_price: null,
+  direction: 'credit',
+  opening_strategy: 'short_put_spread',
+  created_at: '2026-08-06T19:59:04.016204Z',
+  last_transaction_at: null,
+  legs: [
+    {
+      option_id: 'l1',
+      side: 'buy',
+      position_effect: 'open',
+      expiration_date: '2026-09-18',
+      strike_price: '185.0000',
+      option_type: 'put',
+      executions: [{ price: '28.83', quantity: '5', timestamp: '2026-08-06T19:59:05.133000Z' }],
+    },
+    {
+      option_id: 'l2',
+      side: 'sell',
+      position_effect: 'open',
+      expiration_date: '2026-09-18',
+      strike_price: '190.0000',
+      option_type: 'put',
+      executions: [{ price: '31.63', quantity: '5', timestamp: '2026-08-06T19:59:05.133000Z' }],
+    },
+  ],
+};
+
+describe('normalizeOrder against live payloads', () => {
+  it('does not report a limit price as a fill on an order that never filled', () => {
+    // The bug this replaces: average_price was null, so it fell back to
+    // `price` — the LIMIT — and a cancelled $1.00 bid on F reported a $1.00
+    // fill. The code's own comment claimed to prevent exactly this.
+    const order = normalizeOrder(LIVE_EQUITY_ORDER)!;
+    expect(order.status).toBe('CANCELLED');
+    expect(order.price).toBeNull();
+  });
+
+  it('reports what was ordered, not what filled', () => {
+    // cumulative_quantity is 0 on a cancelled order; reporting that loses the
+    // fact that one share was attempted. `status` already says it didn't fill.
+    expect(normalizeOrder(LIVE_EQUITY_ORDER)!.quantity).toBe(1);
+  });
+
+  it('reads an option order as an OPTION, with its contract', () => {
+    // An option order has no `option` object at all — the contract lives on the
+    // legs, which is why this used to come back as an unlabelled EQUITY row.
+    const order = normalizeOrder(LIVE_OPTION_ORDER)!;
+    expect(order.assetType).toBe('OPTION');
+    expect(order.symbol).toBe('MU');
+    expect(order.option).toEqual({
+      underlyingSymbol: 'MU',
+      putCall: 'CALL',
+      strike: 1250,
+      expiration: '2026-09-18',
+      multiplier: 100,
+    });
+  });
+
+  it('takes the fill price from `price` when options leave average_price null', () => {
+    // Options come back filled with average_price null. The rule is about
+    // state, not field name: a fill price exists once something has filled.
+    expect(normalizeOrder(LIVE_OPTION_ORDER)!.price).toBe(85);
+  });
+
+  it('falls back to the execution timestamp when last_transaction_at is null', () => {
+    expect(normalizeOrder(LIVE_OPTION_ORDER)!.timestamp).toBe('2026-06-05T19:05:09.083Z');
+  });
+
+  it('reads direction from the leg, not from debit/credit', () => {
+    // 'debit' and 'credit' describe cash flow, and neither starts with 's', so
+    // every option order used to read as a BUY.
+    expect(normalizeOrder(LIVE_OPTION_ORDER)!.side).toBe('BUY');
+  });
+
+  it('calls a credit spread a sell, and says it is a spread', () => {
+    const order = normalizeOrder(LIVE_SPREAD_ORDER)!;
+    expect(order.side).toBe('SELL');
+    expect(order.strategy).toBe('short_put_spread');
+    // Without legCount the UI would render one leg of a spread as the trade.
+    expect(order.legCount).toBe(2);
+    expect(order.option?.strike).toBe(185);
+  });
+});
