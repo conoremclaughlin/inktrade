@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
 import { TradingChart } from '@/components/stock/trading-chart';
 import { OIDistributionChart } from '@/components/stock/oi-chart';
+import { OrderActivityPanel } from '@/components/stock/order-activity';
 import { ThetaDecayChart } from '@/components/stock/theta-decay-chart';
 import { useQuote, useTickerHistory } from '@/lib/hooks';
 
@@ -252,6 +253,14 @@ function StockContent() {
               </div>
             </div>
           )}
+
+          {/*
+            Your own orders in this name, above the market-wide charts: what
+            you did matters more than what everyone else did.
+          */}
+          <div className="mt-6">
+            <OrderActivityPanel symbol={symbol} />
+          </div>
 
           {/* Theta Decay Projection */}
           {quote.data && (
