@@ -11,9 +11,13 @@ import type {
   OptionChain,
   OptionContract,
   OrderActivity,
+  OrderReceipt,
+  OrderRequest,
+  OrderReview,
   PortfolioSummary,
 } from './broker/types.js';
-import type { TaxLot } from './tax-lots.js';
+import type { CostBasisDecision, CostBasisStrategy, SalePlan, TaxLot } from './tax-lots.js';
+import type { TradingModeDecision } from './trading-mode.js';
 
 /** What /api/portfolio returns — the summary plus which brokerage produced it. */
 export interface PortfolioResponse {
@@ -71,6 +75,28 @@ export interface ApiClient {
   getOIDistribution(symbol: string, expiry?: string): Promise<OIDistributionResponse>;
   getWatchlist(): Promise<WatchlistResponse>;
   putWatchlist(symbols: string[]): Promise<WatchlistResponse>;
+
+  // --- Orders -----------------------------------------------------------
+  //
+  // These deliberately resolve rather than throw on a refusal. An order that
+  // the broker rejects still comes back with the sale plan attached, and that
+  // plan is often the most useful thing on the screen — which shares would
+  // have gone, while you fix whatever was objected to. Throwing would discard
+  // it along with the reason.
+  reviewOrder(order: OrderRequest): Promise<OrderOutcome>;
+  placeOrder(order: OrderRequest): Promise<OrderOutcome>;
+
+  getTradingMode(): Promise<TradingModeDecision>;
+  getCostBasis(): Promise<CostBasisDecision>;
+  setCostBasis(strategy: CostBasisStrategy): Promise<CostBasisDecision>;
+}
+
+/** A review, a receipt, or a refusal — the plan rides along with all three. */
+export interface OrderOutcome {
+  review?: OrderReview;
+  receipt?: OrderReceipt;
+  plan?: SalePlan;
+  error?: string;
 }
 
 export function createApiClient(options: ApiClientOptions = {}): ApiClient {
@@ -178,5 +204,56 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         body: JSON.stringify({ symbols }),
       });
     },
+
+    reviewOrder(order) {
+      return sendOrder(order, true);
+    },
+
+    placeOrder(order) {
+      return sendOrder(order, false);
+    },
+
+    getTradingMode() {
+      return request<TradingModeDecision>('/api/broker/trading-mode');
+    },
+
+    getCostBasis() {
+      return request<CostBasisDecision>('/api/broker/cost-basis');
+    },
+
+    setCostBasis(strategy) {
+      return request<CostBasisDecision>('/api/broker/cost-basis', {
+        method: 'PUT',
+        body: JSON.stringify({ strategy }),
+      });
+    },
   };
+
+  /**
+   * Send an order, and read the body whatever the status.
+   *
+   * Unlike every other call here, a refusal is not an exception — a rejected
+   * order still carries the sale plan and the broker's reason, and both belong
+   * on screen. Throwing would leave the caller with a message and nothing to
+   * act on.
+   */
+  async function sendOrder(order: OrderRequest, review: boolean): Promise<OrderOutcome> {
+    const authHeaders = getAuthHeaders ? await getAuthHeaders() : {};
+    try {
+      const res = await doFetch(`${baseUrl}/api/broker/orders${review ? '?review=1' : ''}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify(order),
+      });
+      return (await res.json()) as OrderOutcome;
+    } catch {
+      // A transport failure on a PLACE is the dangerous case: the order may
+      // have reached the broker. Say so rather than implying nothing happened.
+      return {
+        error: review
+          ? 'Could not reach the brokerage.'
+          : 'Could not reach the brokerage — check your orders before retrying, in case this one went through.',
+      };
+    }
+  }
 }

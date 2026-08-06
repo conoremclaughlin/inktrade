@@ -57,3 +57,30 @@ export function ListsIcon({ color, size = 24 }: IconProps) {
     </Svg>
   );
 }
+
+/**
+ * Two arrows crossing — buy and sell, the exchange.
+ *
+ * Deliberately not a dollar sign: the tab is where orders are placed, not
+ * where money is displayed.
+ */
+export function TradeIcon({ color, size = 24 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 8h13M13 4l4 4-4 4"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M20 16H7M11 12l-4 4 4 4"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}

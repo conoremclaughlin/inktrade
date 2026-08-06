@@ -8,7 +8,8 @@ import type { RootStackParamList, TabParamList } from './src/navigation';
 import { PortfolioScreen } from './src/screens/PortfolioScreen';
 import { ListsScreen } from './src/screens/ListsScreen';
 import { StockScreen } from './src/screens/StockScreen';
-import { ListsIcon, PortfolioIcon } from './src/components/TabIcons';
+import { TradeScreen } from './src/screens/TradeScreen';
+import { ListsIcon, PortfolioIcon, TradeIcon } from './src/components/TabIcons';
 import { colors } from './src/ui/theme';
 
 const queryClient = new QueryClient({
@@ -67,6 +68,13 @@ function Tabs() {
         component={ListsScreen}
         options={{
           tabBarIcon: ({ color, size }) => <ListsIcon color={color} size={size} />,
+        }}
+      />
+      <Tab.Screen
+        name="Trade"
+        component={TradeScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => <TradeIcon color={color} size={size} />,
         }}
       />
     </Tab.Navigator>

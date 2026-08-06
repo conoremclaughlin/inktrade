@@ -75,6 +75,8 @@ export const brokerKeys = {
   watchlists: () => ['broker', 'watchlists'] as const,
   watchlist: (id: string) => ['broker', 'watchlist', id] as const,
   orders: (symbol?: string) => ['broker', 'orders', symbol ?? 'all'] as const,
+  tradingMode: () => ['broker', 'trading-mode'] as const,
+  costBasis: () => ['broker', 'cost-basis'] as const,
 };
 
 /** Holdings move only on a fill, so they tolerate more staleness than quotes. */
@@ -169,5 +171,31 @@ export function orderActivityQuery(api: ApiClient, symbol?: string, limit?: numb
     queryKey: brokerKeys.orders(symbol),
     queryFn: () => api.getOrderActivity({ symbol, limit }),
     staleTime: PORTFOLIO_STALE_MS,
+  };
+}
+
+/**
+ * The trading settings, shared by both platforms.
+ *
+ * Long stale times on purpose: these change when someone opens settings and
+ * changes them, not on their own. Both are enforced server-side regardless of
+ * what a cached copy says, so a stale read is a cosmetic problem rather than a
+ * correctness one.
+ */
+export const SETTINGS_STALE_MS = 5 * 60_000;
+
+export function tradingModeQuery(api: ApiClient) {
+  return {
+    queryKey: brokerKeys.tradingMode(),
+    queryFn: () => api.getTradingMode(),
+    staleTime: SETTINGS_STALE_MS,
+  };
+}
+
+export function costBasisQuery(api: ApiClient) {
+  return {
+    queryKey: brokerKeys.costBasis(),
+    queryFn: () => api.getCostBasis(),
+    staleTime: SETTINGS_STALE_MS,
   };
 }
