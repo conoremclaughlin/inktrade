@@ -3,39 +3,43 @@ import {
   ActivityIndicator,
   Pressable,
   RefreshControl,
-  SectionList,
+  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { Quote } from '@inktrade/client';
+import type { BrokerWatchlist, Quote } from '@inktrade/client';
 import type { RootStackParamList } from '../navigation';
-import { useListQuotes, useLists } from '../hooks/useLists';
+import {
+  useBrokerWatchlist,
+  useBrokerWatchlists,
+  useWatchlistQuotes,
+} from '../hooks/useBrokerWatchlists';
 import { API_BASE_URL, API_URL_HINT } from '../lib/api';
 import { PositionRow } from '../components/PositionRow';
 import { colors, fonts, radii, spacing } from '../ui/theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+/**
+ * The brokerage's watchlists.
+ *
+ * One list is open at a time. That is not a space-saving choice — symbols and
+ * quotes are fetched per list, so opening everything at once would cost a
+ * request per list plus a recurring quote poll for symbols nobody is reading.
+ * An accordion makes the cheap thing and the obvious thing the same thing.
+ */
 export function ListsScreen() {
   const navigation = useNavigation<Nav>();
-  const { lists, isLoading, addSymbol, removeSymbol } = useLists();
-  const { data, isFetching, refetch, error } = useListQuotes(lists);
-  const [activeInput, setActiveInput] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
+  const { data, isLoading, isFetching, refetch, error } = useBrokerWatchlists();
+  const [openId, setOpenId] = useState<string | null>(null);
 
-  const quotes = useMemo(() => {
-    const map = new Map<string, Quote>();
-    for (const q of data?.quotes ?? []) map.set(q.symbol, q);
-    return map;
-  }, [data]);
-
-  const sections = useMemo(
-    () => lists.map((l) => ({ list: l, title: l.name, data: l.symbols })),
-    [lists],
+  const lists = useMemo(
+    // Empty lists last: they can't be read, so they shouldn't be in the way.
+    () => [...(data?.watchlists ?? [])].sort((a, b) => b.symbolCount - a.symbolCount),
+    [data],
   );
 
   if (isLoading) {
@@ -46,14 +50,14 @@ export function ListsScreen() {
     );
   }
 
-  const submit = (listId: string) => {
-    addSymbol(listId, draft);
-    setDraft('');
-    setActiveInput(null);
-  };
-
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={colors.accent} />
+      }
+    >
       {error && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>Couldn&apos;t reach the API at {API_BASE_URL}</Text>
@@ -61,129 +65,136 @@ export function ListsScreen() {
         </View>
       )}
 
-      <SectionList
-        sections={sections}
-        keyExtractor={(symbol, i) => `${symbol}-${i}`}
-        stickySectionHeadersEnabled={false}
-        refreshControl={
-          <RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={colors.accent} />
-        }
-        contentContainerStyle={styles.content}
-        renderSectionHeader={({ section }) => (
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-            <Pressable
-              onPress={() => {
-                setActiveInput(activeInput === section.list.id ? null : section.list.id);
-                setDraft('');
-              }}
-              hitSlop={10}
-            >
-              <Text style={styles.addToggle}>{activeInput === section.list.id ? '×' : '+'}</Text>
-            </Pressable>
-          </View>
-        )}
-        renderSectionFooter={({ section }) =>
-          activeInput === section.list.id ? (
-            <View style={styles.addRow}>
-              <TextInput
-                value={draft}
-                onChangeText={(t) => setDraft(t.toUpperCase())}
-                placeholder={`Add to ${section.title}`}
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                autoFocus
-                returnKeyType="done"
-                onSubmitEditing={() => submit(section.list.id)}
-                style={styles.input}
-              />
-              <Pressable
-                onPress={() => submit(section.list.id)}
-                disabled={!draft.trim()}
-                style={({ pressed }) => [
-                  styles.addButton,
-                  !draft.trim() && styles.addDisabled,
-                  pressed && { opacity: 0.6 },
-                ]}
-              >
-                <Text style={styles.addButtonText}>Add</Text>
-              </Pressable>
-            </View>
-          ) : section.data.length === 0 ? (
-            <Text style={styles.emptyList}>Nothing here yet</Text>
-          ) : null
-        }
-        renderItem={({ item }) => {
-          const q = quotes.get(item);
+      {!error && lists.length === 0 && (
+        <Text style={styles.empty}>
+          No watchlists yet. Link a brokerage in Settings on the web app.
+        </Text>
+      )}
+
+      {lists.map((list) => (
+        <ListSection
+          key={list.id}
+          list={list}
+          open={openId === list.id}
+          onToggle={() => setOpenId(openId === list.id ? null : list.id)}
+          onSymbolPress={(symbol) => navigation.navigate('Stock', { symbol })}
+        />
+      ))}
+    </ScrollView>
+  );
+}
+
+function ListSection({
+  list,
+  open,
+  onToggle,
+  onSymbolPress,
+}: {
+  list: BrokerWatchlist;
+  open: boolean;
+  onToggle: () => void;
+  onSymbolPress: (symbol: string) => void;
+}) {
+  // Both queries are gated on `open`, so a closed list costs nothing.
+  const detail = useBrokerWatchlist(open ? list.id : null);
+  const symbols = detail.data?.symbols ?? [];
+  const quotes = useWatchlistQuotes(open ? symbols : []);
+
+  const bySymbol = useMemo(() => {
+    const map = new Map<string, Quote>();
+    for (const q of quotes.data?.quotes ?? []) map.set(q.symbol, q);
+    return map;
+  }, [quotes.data]);
+
+  return (
+    <View>
+      <Pressable
+        onPress={onToggle}
+        style={({ pressed }) => [styles.sectionHeader, pressed && styles.pressed]}
+      >
+        <View style={styles.headerLeft}>
+          {list.emoji ? <Text style={styles.emoji}>{list.emoji}</Text> : null}
+          <Text style={styles.sectionTitle} numberOfLines={1}>
+            {list.name}
+          </Text>
+        </View>
+        <View style={styles.headerRight}>
+          <Text style={styles.count}>{list.symbolCount}</Text>
+          <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
+        </View>
+      </Pressable>
+
+      {open && detail.isLoading && (
+        <View style={styles.inlineLoading}>
+          <ActivityIndicator color={colors.accent} size="small" />
+        </View>
+      )}
+
+      {open && !detail.isLoading && symbols.length === 0 && (
+        // The brokerage's count includes crypto, futures and indexes we filter
+        // out, so "12 items" can legitimately resolve to no equities. Saying so
+        // beats an empty list that looks broken.
+        <Text style={styles.empty}>Nothing here that quotes as an equity.</Text>
+      )}
+
+      {open &&
+        symbols.map((symbol) => {
+          const quote = bySymbol.get(symbol);
           return (
             <PositionRow
-              symbol={item}
-              value={q?.price ?? 0}
-              changePercent={q?.changePercent ?? 0}
-              pending={!q}
-              onPress={() => navigation.navigate('Stock', { symbol: item })}
+              key={symbol}
+              symbol={symbol}
+              value={quote?.price ?? 0}
+              changePercent={quote?.changePercent ?? 0}
+              pending={!quote}
+              onPress={() => onSymbolPress(symbol)}
             />
           );
-        }}
-        ListEmptyComponent={
-          <View style={styles.centered}>
-            <Text style={styles.emptyList}>No lists yet</Text>
-          </View>
-        }
-      />
+        })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.void },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxl },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xxl,
+  },
   content: { paddingBottom: spacing.xxl },
+  pressed: { backgroundColor: colors.surface },
 
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xs,
+    paddingVertical: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle,
   },
-  sectionTitle: {
-    color: colors.textTertiary,
-    fontFamily: fonts.mono,
-    fontSize: 10,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-  },
-  addToggle: { color: colors.accentBright, fontSize: 18, lineHeight: 20, fontWeight: '600' },
-
-  addRow: {
+  headerLeft: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-  },
-  input: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    minWidth: 0,
+  },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  emoji: { fontSize: 14 },
+  sectionTitle: {
     color: colors.textPrimary,
-    fontFamily: fonts.mono,
     fontSize: 14,
+    fontWeight: '600',
+    flexShrink: 1,
   },
-  addButton: {
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.md,
-    backgroundColor: colors.accent,
-  },
-  addDisabled: { opacity: 0.35 },
-  addButtonText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  count: { color: colors.textTertiary, fontFamily: fonts.mono, fontSize: 12 },
+  chevron: { color: colors.textMuted, fontSize: 12, width: 12, textAlign: 'center' },
 
-  emptyList: {
+  inlineLoading: { paddingVertical: spacing.md },
+  empty: {
     color: colors.textMuted,
     fontSize: 12,
     paddingHorizontal: spacing.lg,
