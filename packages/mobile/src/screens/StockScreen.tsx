@@ -22,6 +22,8 @@ import type { RootStackParamList } from '../navigation';
 import { api } from '../lib/api';
 import { CandlestickChart, type ChartMode } from '../components/CandlestickChart';
 import { OIChart } from '../components/OIChart';
+import { OrderActivityList } from '../components/OrderActivityList';
+import { useOrderActivity } from '../hooks/useTrading';
 import { changeColor, colors, fonts, formatPercent, formatPrice, radii, spacing } from '../ui/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stock'>;
@@ -37,6 +39,7 @@ export function StockScreen({ route, navigation }: Props) {
   const [active, setActive] = useState<IndicatorId[]>(['sma20', 'sma50']);
 
   const history = useQuery(tickerHistoryQuery(api, symbol, period));
+  const activity = useOrderActivity(symbol, 25);
   const oi = useQuery(oiDistributionQuery(api, symbol));
 
   const points = history.data?.points ?? [];
@@ -119,6 +122,18 @@ export function StockScreen({ route, navigation }: Props) {
           <Stat label="Max drawdown" value={formatPercent(history.data.maxDrawdownPct)} />
         </View>
       )}
+
+      {/*
+        Your own orders in this name, above the open-interest chart: what you
+        did matters more than what the market did.
+      */}
+      <Section title="Your activity">
+        <OrderActivityList
+          orders={activity.data?.orders ?? []}
+          loading={activity.isLoading}
+          emptyLabel={`No orders in ${symbol}.`}
+        />
+      </Section>
 
       <Section title="Open interest by strike">
         {oi.isLoading ? (

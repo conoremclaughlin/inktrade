@@ -49,6 +49,16 @@ export function ChainScreen() {
   const [symbol, setSymbol] = useState(route.params?.symbol?.toUpperCase() ?? 'MU');
   const [draft, setDraft] = useState(symbol);
   const [expiration, setExpiration] = useState<string | undefined>(undefined);
+  /**
+   * Which strike is showing its detail.
+   *
+   * Tapping a strike used to open an equity ticket for the underlying — you
+   * tapped an 890 call and got a ticket for the stock, which is a small lie.
+   * Option orders can't be placed at all until the agent-tradable account has
+   * options approval, so until then a tap shows the contract instead of
+   * pretending to trade it.
+   */
+  const [openStrike, setOpenStrike] = useState<number | null>(null);
 
 
   /**
@@ -88,6 +98,7 @@ export function ChainScreen() {
   }, [contracts]);
 
   const spot = chain.data?.underlyingPrice ?? null;
+  const selectedRow = rows.find((r) => r.strike === openStrike);
 
   /**
    * Open at the money.
@@ -170,6 +181,7 @@ export function ChainScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.expirationBar}
           contentContainerStyle={styles.expirations}
         >
           {chain.data.expirations.map((exp) => {
@@ -213,15 +225,34 @@ export function ChainScreen() {
         </View>
       ) : chain.error ? (
         <Text style={styles.empty}>Couldn&apos;t load the chain for {symbol}.</Text>
+      ) : rows.length === 0 ? (
+        // A request that succeeds with no contracts is not an error, so the
+        // error branch never fires — an unknown ticker just rendered a blank
+        // screen with no explanation.
+        <Text style={styles.empty}>
+          No option contracts for {symbol}. Check the symbol, or try another
+          expiration.
+        </Text>
       ) : (
         <FlatList
           data={rows}
           keyExtractor={(row) => String(row.strike)}
           initialScrollIndex={atMoneyIndex}
-          // Every row is the same height, so the list can jump straight to the
-          // money without measuring — which is what makes initialScrollIndex
-          // safe on a ladder of several hundred strikes.
-          getItemLayout={(_, index) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index })}
+          /*
+            Every row is the same height, so the list jumps straight to the
+            money without measuring several hundred strikes.
+
+            This is why the detail sits in a panel below rather than expanding
+            the row: a variable-height row invalidates getItemLayout, and
+            dropping getItemLayout while initialScrollIndex is set sends
+            FlatList somewhere arbitrary. It put a $889 underlying's ladder at
+            strike 1050.
+          */
+          getItemLayout={(_, index) => ({
+            length: ROW_HEIGHT,
+            offset: ROW_HEIGHT * index,
+            index,
+          })}
           onViewableItemsChanged={onViewableItemsChanged.current}
           viewabilityConfig={VIEWABILITY}
           initialNumToRender={20}
@@ -232,10 +263,36 @@ export function ChainScreen() {
               spot={spot}
               priced={priced}
               isLoadingContract={isLoadingContract}
-              onPress={() => navigation.navigate('Trade', { symbol })}
+              selected={openStrike === item.strike}
+              onPress={() => setOpenStrike(openStrike === item.strike ? null : item.strike)}
             />
           )}
         />
+      )}
+
+      {selectedRow && (
+        <View style={styles.detail}>
+          <View style={styles.detailHeader}>
+            <Text style={styles.detailStrike}>{selectedRow.strike} strike</Text>
+            <Pressable onPress={() => setOpenStrike(null)} hitSlop={12}>
+              <Text style={styles.detailClose}>Close</Text>
+            </Pressable>
+          </View>
+          <View style={styles.detailCols}>
+            <ContractDetail
+              contract={
+                selectedRow.call ? (priced.get(selectedRow.call.id) ?? selectedRow.call) : undefined
+              }
+              label="Call"
+            />
+            <ContractDetail
+              contract={
+                selectedRow.put ? (priced.get(selectedRow.put.id) ?? selectedRow.put) : undefined
+              }
+              label="Put"
+            />
+          </View>
+        </View>
       )}
     </View>
   );
@@ -256,12 +313,14 @@ function StrikeRowView({
   spot,
   priced,
   isLoadingContract,
+  selected,
   onPress,
 }: {
   row: StrikeRow;
   spot: number | null;
   priced: Map<string, OptionContract>;
   isLoadingContract: (id: string) => boolean;
+  selected: boolean;
   onPress: () => void;
 }) {
   const call = row.call ? (priced.get(row.call.id) ?? row.call) : undefined;
@@ -274,14 +333,14 @@ function StrikeRowView({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.row, selected && styles.rowSelected, pressed && styles.pressed]}
     >
       <Side
         contract={call}
         inTheMoney={callItm}
         loading={row.call ? isLoadingContract(row.call.id) : false}
       />
-      <Text style={styles.strikeCell}>{row.strike}</Text>
+      <Text style={[styles.strikeCell, selected && styles.strikeSelected]}>{row.strike}</Text>
       <Side
         contract={put}
         inTheMoney={putItm}
@@ -290,6 +349,55 @@ function StrikeRowView({
     </Pressable>
   );
 }
+
+/**
+ * What the chain rows can't fit.
+ *
+ * Deliberately not a trade button. Option orders cannot be placed until the
+ * agent-tradable account carries options approval, and a button that opened an
+ * equity ticket for the underlying would be worse than none.
+ */
+function ContractDetail({
+  contract,
+  label,
+}: {
+  contract?: OptionContract;
+  label: string;
+}) {
+  if (!contract) return null;
+
+  return (
+    <View style={styles.detailCol}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <DetailRow k="Bid / Ask" v={pair(contract.bid, contract.ask)} />
+      <DetailRow k="Break-even" v={money(contract.breakEvenPrice)} />
+      <DetailRow k="IV" v={percent(contract.impliedVolatility)} />
+      <DetailRow k="Delta" v={fixed(contract.delta)} />
+      <DetailRow k="Theta" v={fixed(contract.theta)} />
+      <DetailRow k="Open int." v={count(contract.openInterest)} />
+      <DetailRow k="Volume" v={count(contract.volume)} />
+    </View>
+  );
+}
+
+function DetailRow({ k, v }: { k: string; v: string }) {
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailKey}>{k}</Text>
+      <Text style={styles.detailValue}>{v}</Text>
+    </View>
+  );
+}
+
+// A dash for anything the provider didn't send. Greeks are optional on the
+// contract precisely so a source that lacks them can't render zeros as real.
+const money = (n: number | null | undefined) =>
+  n === null || n === undefined ? '—' : formatMoney(n);
+const fixed = (n: number | undefined) => (n === undefined ? '—' : n.toFixed(3));
+const percent = (n: number | undefined) => (n === undefined ? '—' : `${(n * 100).toFixed(1)}%`);
+const count = (n: number | undefined) => (n === undefined ? '—' : n.toLocaleString('en-US'));
+const pair = (bid: number | null, ask: number | null) =>
+  bid === null && ask === null ? '—' : `${money(bid)} / ${money(ask)}`;
 
 function Side({
   contract,
@@ -381,6 +489,9 @@ const styles = StyleSheet.create({
   },
   spotValue: { color: colors.textPrimary, fontFamily: fonts.mono, fontSize: 15, fontWeight: '700' },
 
+  // Fixed height so the detail panel appearing can't squeeze the ladder of
+  // expirations up behind the column header.
+  expirationBar: { flexGrow: 0, flexShrink: 0 },
   expirations: { paddingHorizontal: spacing.lg, gap: spacing.xs, paddingBottom: spacing.sm },
   expiration: {
     alignItems: 'center',
@@ -398,6 +509,7 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
     paddingVertical: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderDefault,
@@ -433,6 +545,38 @@ const styles = StyleSheet.create({
   mark: { color: colors.textPrimary, fontFamily: fonts.mono, fontSize: 13 },
   delta: { color: colors.textTertiary, fontFamily: fonts.mono, fontSize: 10, marginTop: 1 },
   pending: { color: colors.textMuted, fontFamily: fonts.mono, fontSize: 13 },
+
+  detail: {
+    flexShrink: 0,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.deep,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderDefault,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  detailStrike: { color: colors.textPrimary, fontFamily: fonts.mono, fontSize: 14, fontWeight: '700' },
+  detailClose: { color: colors.accentBright, fontSize: 13 },
+  detailCols: { flexDirection: 'row', gap: spacing.lg },
+  rowSelected: { backgroundColor: 'rgba(59,130,246,0.12)' },
+  strikeSelected: { color: colors.accentBright },
+  detailCol: { flex: 1, gap: 3 },
+  detailLabel: {
+    color: colors.accentBright,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 3,
+  },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
+  detailKey: { color: colors.textTertiary, fontSize: 11 },
+  detailValue: { color: colors.textSecondary, fontFamily: fonts.mono, fontSize: 11 },
 
   empty: {
     color: colors.textMuted,

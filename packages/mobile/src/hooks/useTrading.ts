@@ -3,6 +3,7 @@ import {
   brokerQuotesQuery,
   costBasisQuery,
   optionChainQuery,
+  orderActivityQuery,
   tradingModeQuery,
   type CostBasisStrategy,
   type OrderRequest,
@@ -25,6 +26,11 @@ export function useBrokerQuotes(symbols: string[]) {
 /** The option ladder for one underlying, at one expiration. */
 export function useOptionChain(symbol: string | null, expiration?: string) {
   return useQuery(optionChainQuery(api, symbol, expiration));
+}
+
+/** What you did in a name — or everything, when no symbol is given. */
+export function useOrderActivity(symbol?: string, limit?: number) {
+  return useQuery(orderActivityQuery(api, symbol, limit));
 }
 
 export function useTradingMode() {
