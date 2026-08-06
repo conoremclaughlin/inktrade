@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { signUpWithPassword } from '@/lib/auth/actions';
 
 export default function SignupForm() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -32,6 +34,12 @@ export default function SignupForm() {
       const result = await signUpWithPassword(email, password);
       if ('error' in result) {
         setMessage({ type: 'error', text: result.error });
+      } else if (result.signedIn) {
+        // No confirmation required — the account is live and already signed in,
+        // so send them into the app rather than asking for a step that doesn't
+        // exist.
+        router.push('/');
+        router.refresh();
       } else {
         setMessage({ type: 'success', text: 'Check your email for a confirmation link.' });
       }
