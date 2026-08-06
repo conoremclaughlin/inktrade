@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
 import { TradingChart } from '@/components/stock/trading-chart';
@@ -28,7 +28,11 @@ function formatPct(n: number): string {
   return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 }
 
-export default function StockPage() {
+/**
+ * useSearchParams opts its subtree out of prerendering, so the page body sits
+ * behind a Suspense boundary — see the default export below.
+ */
+function StockContent() {
   const searchParams = useSearchParams();
 
   const [symbol, setSymbol] = useState(
@@ -283,5 +287,13 @@ export default function StockPage() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+export default function StockPage() {
+  return (
+    <Suspense fallback={null}>
+      <StockContent />
+    </Suspense>
   );
 }

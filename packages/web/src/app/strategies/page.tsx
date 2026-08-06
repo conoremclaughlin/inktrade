@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
 import { PortfolioInput } from '@/components/strategies/portfolio-input';
@@ -12,7 +12,11 @@ import { usePortfolioAnalysis } from '@/lib/hooks';
 
 const DEFAULT_SYMBOLS = ['MU', 'GOOG', 'TQQQ', 'SOXL'];
 
-export default function StrategiesPage() {
+/**
+ * useSearchParams opts its subtree out of prerendering, so the page body sits
+ * behind a Suspense boundary — see the default export below.
+ */
+function StrategiesContent() {
   const searchParams = useSearchParams();
 
   const [symbols, setSymbols] = useState<string[]>(() => {
@@ -135,5 +139,13 @@ export default function StrategiesPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+export default function StrategiesPage() {
+  return (
+    <Suspense fallback={null}>
+      <StrategiesContent />
+    </Suspense>
   );
 }

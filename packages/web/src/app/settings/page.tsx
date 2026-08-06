@@ -1,15 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/navbar';
 import { useSchwabStatus, useSchwabConfigure, useSchwabDisconnect } from '@/lib/hooks';
 
 export default function SettingsPage() {
-  const searchParams = useSearchParams();
-  const linked = searchParams.get('linked');
-  const error = searchParams.get('error');
-
   const { data: status, isLoading } = useSchwabStatus();
   const configure = useSchwabConfigure();
   const disconnect = useSchwabDisconnect();
@@ -17,12 +13,6 @@ export default function SettingsPage() {
   const [appKey, setAppKey] = useState('');
   const [appSecret, setAppSecret] = useState('');
   const [showCredentials, setShowCredentials] = useState(false);
-
-  useEffect(() => {
-    if (linked === 'true') {
-      window.history.replaceState(null, '', '/settings');
-    }
-  }, [linked]);
 
   const handleConfigure = () => {
     if (!appKey.trim() || !appSecret.trim()) return;
@@ -53,33 +43,14 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        {/* Success banner */}
-        {linked === 'true' && (
-          <div className="mb-6 rounded-xl border border-emerald/30 bg-emerald/5 p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-full bg-emerald/20 flex items-center justify-center">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M3 8.5L6.5 12L13 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-[14px] font-semibold text-emerald">Schwab Account Linked</p>
-                <p className="text-[12px] text-text-tertiary">Your account is connected and set as the active data provider.</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Error banner */}
-        {error && (
-          <div className="mb-6 rounded-xl border border-rose/30 bg-rose/5 p-4">
-            <p className="text-[13px] font-mono text-rose">
-              {error === 'no_code' ? 'No authorization code received from Schwab.' :
-               error === 'not_configured' ? 'Schwab credentials not configured. Add them below.' :
-               decodeURIComponent(error)}
-            </p>
-          </div>
-        )}
+        {/*
+          Isolated behind Suspense because useSearchParams opts its subtree out
+          of prerendering. Scoped to the banners rather than the whole page so
+          the settings UI still renders statically and nothing flashes.
+        */}
+        <Suspense fallback={null}>
+          <CallbackBanners />
+        </Suspense>
 
         {/* Schwab Connection Card */}
         <section className="glass-bright rounded-xl border border-border-subtle overflow-hidden">
@@ -283,6 +254,53 @@ export default function SettingsPage() {
       </main>
     </div>
   );
+}
+
+/** Outcome of an OAuth callback, read from the query string it redirected to. */
+function CallbackBanners() {
+  const searchParams = useSearchParams();
+  const linked = searchParams.get('linked');
+  const error = searchParams.get('error');
+
+  useEffect(() => {
+    // Drop the marker so a reload doesn't re-announce a link that already
+    // happened, and so the URL is clean to share or bookmark.
+    if (linked === 'true') {
+      window.history.replaceState(null, '', '/settings');
+    }
+  }, [linked]);
+
+  if (linked === 'true') {
+    return (
+      <div className="mb-6 rounded-xl border border-emerald/30 bg-emerald/5 p-4">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-full bg-emerald/20 flex items-center justify-center">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M3 8.5L6.5 12L13 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-[14px] font-semibold text-emerald">Schwab Account Linked</p>
+            <p className="text-[12px] text-text-tertiary">Your account is connected and set as the active data provider.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mb-6 rounded-xl border border-rose/30 bg-rose/5 p-4">
+        <p className="text-[13px] font-mono text-rose">
+          {error === 'no_code' ? 'No authorization code received from Schwab.' :
+           error === 'not_configured' ? 'Schwab credentials not configured. Add them below.' :
+           decodeURIComponent(error)}
+        </p>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function StatusBadge({ status, isLoading }: { status?: string; isLoading: boolean }) {

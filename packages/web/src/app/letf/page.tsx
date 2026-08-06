@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { Suspense, useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
 import { useLetfProfile, useLetfHoldings, useLetfHistory, useTickerHistory } from '@/lib/hooks';
@@ -122,7 +122,11 @@ function CompareInput({ onSubmit, onClear, activeSymbol }: {
   );
 }
 
-export default function LetfPage() {
+/**
+ * useSearchParams opts its subtree out of prerendering, so the page body sits
+ * behind a Suspense boundary — see the default export below.
+ */
+function LetfContent() {
   const searchParams = useSearchParams();
 
   const [symbol, setSymbol] = useState<string>(
@@ -341,5 +345,13 @@ export default function LetfPage() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+export default function LetfPage() {
+  return (
+    <Suspense fallback={null}>
+      <LetfContent />
+    </Suspense>
   );
 }
