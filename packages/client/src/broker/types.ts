@@ -109,6 +109,76 @@ export interface OrderActivity {
   option?: OptionDetail;
 }
 
+export type OrderType = 'MARKET' | 'LIMIT' | 'STOP' | 'STOP_LIMIT';
+
+export type TimeInForce = 'DAY' | 'GTC';
+
+/** Which trading session an order is tagged for. */
+export type MarketSession = 'REGULAR' | 'EXTENDED' | 'ALL_DAY';
+
+export interface OrderRequest {
+  accountId: string;
+  symbol: string;
+  side: OrderSide;
+  type: OrderType;
+  /** Share count. Exactly one of quantity or notional. */
+  quantity?: number;
+  /** Dollar notional — market orders only; the broker computes the shares. */
+  notional?: number;
+  /** Required for LIMIT and STOP_LIMIT. */
+  limitPrice?: number;
+  /** Required for STOP and STOP_LIMIT. */
+  stopPrice?: number;
+  timeInForce?: TimeInForce;
+  session?: MarketSession;
+  /**
+   * Idempotency key. Re-send the same value when retrying a request that may
+   * have reached the broker, so a network failure can't place a second order.
+   */
+  clientOrderId?: string;
+}
+
+/** A pre-trade check: what it would cost and what the broker objects to. */
+export interface OrderReview {
+  estimatedCost: number | null;
+  /** Broker-side alerts — buying power, pattern day trading, halts. */
+  warnings: string[];
+  /** False when the broker says it would refuse the order outright. */
+  acceptable: boolean;
+  quotePrice: number | null;
+}
+
+export interface OrderReceipt {
+  id: string;
+  status: OrderStatus;
+  symbol: string;
+  side: OrderSide;
+  quantity: number;
+  /** Echo of the idempotency key, when the broker returns one. */
+  clientOrderId?: string;
+}
+
+/**
+ * Order placement, kept separate from {@link BrokerProvider}.
+ *
+ * A provider that can only read is the common case and should not have to
+ * stub out methods that would place trades. Callers narrow with
+ * {@link canTrade} rather than assuming.
+ */
+export interface TradingProvider {
+  /** Accounts this provider is permitted to trade in. Often a subset. */
+  tradableAccountIds(): Promise<string[]>;
+  reviewOrder(request: OrderRequest): Promise<OrderReview>;
+  placeOrder(request: OrderRequest): Promise<OrderReceipt>;
+  cancelOrder(accountId: string, orderId: string): Promise<void>;
+}
+
+export function canTrade(
+  provider: BrokerProvider,
+): provider is BrokerProvider & TradingProvider {
+  return typeof (provider as Partial<TradingProvider>).placeOrder === 'function';
+}
+
 export interface BrokerProvider {
   readonly name: string;
   /** True for the mock — lets the UI say so rather than quietly showing fiction. */

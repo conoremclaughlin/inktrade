@@ -7,10 +7,10 @@
  * before it leaves this file, so screens never learn that this brokerage
  * happens to be MCP-shaped, and our own API can proxy it like any other source.
  *
- * **Read-only by construction.** The server also exposes `place_equity_order`,
- * `place_option_order`, `exercise_option` and the cancel tools; none are wired
- * here. Trading is a deliberate, separately-reviewed step, not something that
- * arrives as a side effect of rendering a portfolio.
+ * Reading is the bulk of this file. Order placement lives in ./trading.ts and
+ * is reached only through `reviewOrder`, `placeOrder` and `cancelOrder`, each
+ * of which refuses any account Robinhood hasn't flagged agent-tradable. Option
+ * orders and `exercise_option` are not wired at all.
  *
  * ## What Robinhood does and doesn't give you
  *
@@ -36,18 +36,30 @@ import type {
   BrokerageAccount,
   OptionDetail,
   OrderActivity,
+  OrderReceipt,
+  OrderRequest,
+  OrderReview,
   OrderSide,
   OrderStatus,
   PortfolioHistory,
   PortfolioPeriod,
   PortfolioSummary,
   Position,
+  TradingProvider,
 } from '@inktrade/client/broker';
 import type { Client } from '@modelcontextprotocol/client';
+import { randomUUID } from 'node:crypto';
 import { callToolJson } from '../mcp/tools.js';
 import { asArray, asRecord, isoTimestamp, nested, num, str } from './shapes.js';
+import {
+  assertTradable,
+  buildOrderArgs,
+  isAgenticAccount,
+  normalizeReceipt,
+  normalizeReview,
+} from './trading.js';
 
-/** The tools this provider calls. Trading tools are intentionally absent. */
+/** Read tools. Enumerated so a live smoke test can assert the server has them. */
 export const ROBINHOOD_READ_TOOLS = [
   'get_accounts',
   'get_portfolio',
@@ -57,6 +69,16 @@ export const ROBINHOOD_READ_TOOLS = [
   'get_option_instruments',
   'get_option_quotes',
   'get_equity_orders',
+] as const;
+
+/**
+ * Write tools. Listed so it is auditable which of them we are willing to call
+ * — option orders and exercise are deliberately not among them.
+ */
+export const ROBINHOOD_WRITE_TOOLS = [
+  'review_equity_order',
+  'place_equity_order',
+  'cancel_equity_order',
 ] as const;
 
 /**
@@ -80,7 +102,7 @@ export interface RobinhoodBrokerOptions {
   resolveOptionDetail?: boolean;
 }
 
-export class RobinhoodBroker implements BrokerProvider {
+export class RobinhoodBroker implements BrokerProvider, TradingProvider {
   readonly name = 'robinhood';
   readonly isMock = false;
 
@@ -93,10 +115,7 @@ export class RobinhoodBroker implements BrokerProvider {
   }
 
   async getPortfolio(): Promise<PortfolioSummary> {
-    const accountsRaw = asArray(
-      await callToolJson<unknown>(this.client, 'get_accounts'),
-      'accounts',
-    ).filter(isUsableAccount);
+    const accountsRaw = await this.accounts();
 
     const accounts = await Promise.all(
       accountsRaw.map((raw) => this.loadAccount(raw)),
@@ -141,10 +160,7 @@ export class RobinhoodBroker implements BrokerProvider {
    * a live response — the readers are deliberately forgiving as a result.
    */
   async getOrders(params: { symbol?: string; limit?: number } = {}): Promise<OrderActivity[]> {
-    const accounts = asArray(
-      await callToolJson<unknown>(this.client, 'get_accounts'),
-      'accounts',
-    ).filter(isUsableAccount);
+    const accounts = await this.accounts();
 
     const args: Record<string, unknown> = {};
     const accountNumber = accountNumberOf(accounts[0]);
@@ -159,6 +175,66 @@ export class RobinhoodBroker implements BrokerProvider {
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
     return params.limit ? orders.slice(0, params.limit) : orders;
+  }
+
+  /** Accounts Robinhood has flagged as agent-tradable — usually a strict subset. */
+  async tradableAccountIds(): Promise<string[]> {
+    return (await this.accounts())
+      .filter(isAgenticAccount)
+      .map((raw) => accountNumberOf(raw))
+      .filter((id): id is string => Boolean(id));
+  }
+
+  /**
+   * Simulate an order. Returns the estimated cost and Robinhood's pre-trade
+   * alerts without placing anything.
+   */
+  async reviewOrder(request: OrderRequest): Promise<OrderReview> {
+    const args = buildOrderArgs(request);
+    assertTradable(request.accountId, await this.tradableAccountIds());
+    return normalizeReview(
+      await callToolJson<unknown>(this.client, 'review_equity_order', args),
+    );
+  }
+
+  /**
+   * Place a real order for real money.
+   *
+   * Deliberately does not review first — that would double the requests and
+   * hide a decision the caller should be making explicitly. Callers that want
+   * a pre-trade check call {@link reviewOrder} and act on the result.
+   *
+   * An idempotency key is always sent, generated when the caller didn't supply
+   * one. Without it, a retry after a dropped response places a second order.
+   */
+  async placeOrder(request: OrderRequest): Promise<OrderReceipt> {
+    // Build first: a malformed request should fail on its own terms rather
+    // than after a round trip that only exists to check permissions.
+    const args = buildOrderArgs({
+      ...request,
+      clientOrderId: request.clientOrderId ?? randomUUID(),
+    });
+    assertTradable(request.accountId, await this.tradableAccountIds());
+
+    return normalizeReceipt(
+      await callToolJson<unknown>(this.client, 'place_equity_order', args),
+      request,
+    );
+  }
+
+  async cancelOrder(accountId: string, orderId: string): Promise<void> {
+    assertTradable(accountId, await this.tradableAccountIds());
+    await callToolJson<unknown>(this.client, 'cancel_equity_order', {
+      account_number: accountId,
+      order_id: orderId,
+    });
+  }
+
+  private async accounts(): Promise<Record<string, unknown>[]> {
+    return asArray(
+      await callToolJson<unknown>(this.client, 'get_accounts'),
+      'accounts',
+    ).filter(isUsableAccount);
   }
 
   private async loadAccount(raw: Record<string, unknown>): Promise<BrokerageAccount> {

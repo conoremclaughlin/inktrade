@@ -1,6 +1,16 @@
 export {
+  OrderRejectedError,
+  assertTradable,
+  buildOrderArgs,
+  isAgenticAccount,
+  normalizeReceipt,
+  normalizeReview,
+  toRobinhoodType,
+} from './trading.js';
+export {
   RobinhoodBroker,
   ROBINHOOD_READ_TOOLS,
+  ROBINHOOD_WRITE_TOOLS,
   currentEquityPrice,
   nextCursor,
   normalizeEquityPosition,
