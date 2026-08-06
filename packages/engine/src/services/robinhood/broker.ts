@@ -880,7 +880,9 @@ export function idsToQuote(
 ): string[] {
   const idOf = (i: Record<string, unknown>) => str(i, 'id');
 
-  if (underlyingPrice === null || window <= 0) {
+  // A caller can still ask for everything explicitly. That is a choice, not a
+  // fallback, and it stays available.
+  if (window <= 0) {
     return instruments.map(idOf).filter((id): id is string => Boolean(id));
   }
 
@@ -892,8 +894,25 @@ export function idsToQuote(
     ),
   ].sort((a, b) => a - b);
 
-  const below = strikes.filter((s) => s <= underlyingPrice).slice(-window);
-  const above = strikes.filter((s) => s > underlyingPrice).slice(0, window);
+  /**
+   * Where to centre the window.
+   *
+   * When the spot is unknown, centre on the middle of the ladder rather than
+   * quoting every contract. This used to do the opposite, on the reasoning
+   * that any slice would arbitrarily drop contracts — but the measurement is
+   * unambiguous: a failed spot lookup on SPY turned a 3-second chain into an
+   * 80-second one and then returned *zero* priced contracts, because quoting
+   * all 350 timed out and the failure was swallowed.
+   *
+   * Completeness that reliably yields nothing is worse than a slice. Nothing
+   * is lost either way: unpriced strikes fetch themselves as they scroll into
+   * view, so a mis-centred window self-heals on the first scroll.
+   */
+  const centre = underlyingPrice ?? strikes[Math.floor(strikes.length / 2)];
+  if (centre === undefined) return [];
+
+  const below = strikes.filter((s) => s <= centre).slice(-window);
+  const above = strikes.filter((s) => s > centre).slice(0, window);
   const keep = new Set([...below, ...above]);
 
   return instruments

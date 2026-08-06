@@ -243,10 +243,23 @@ describe('idsToQuote', () => {
     expect(new Set(ids)).toEqual(new Set(['c40', 'p40', 'c200', 'p200']));
   });
 
-  it('quotes everything when there is no spot to centre on', () => {
-    // Without a price there is no "around the money", and picking an
-    // arbitrary slice would silently drop contracts.
-    expect(idsToQuote(ladder([10, 20]), null, 1)).toHaveLength(4);
+  it('centres on the ladder when there is no spot, rather than quoting all of it', () => {
+    // This used to return everything, reasoning that any slice would drop
+    // contracts arbitrarily. Measured on SPY, that reasoning cost 80 seconds
+    // and returned ZERO priced contracts — quoting all 350 timed out and the
+    // failure was swallowed. A bounded slice yields 100 in three seconds, and
+    // nothing is lost: unpriced strikes fetch themselves on scroll.
+    const ids = idsToQuote(ladder([10, 20, 30, 40, 50]), null, 1);
+    // Middle strike is 30, so the window is 30 and the one above it.
+    expect(new Set(ids)).toEqual(new Set(['c30', 'p30', 'c40', 'p40']));
+  });
+
+  it('still quotes a short ladder in full, because the window covers it', () => {
+    expect(idsToQuote(ladder([10, 20]), null, 5)).toHaveLength(4);
+  });
+
+  it('returns nothing rather than throwing on an empty ladder', () => {
+    expect(idsToQuote([], null, 25)).toEqual([]);
   });
 
   it('quotes everything when the window is disabled', () => {
