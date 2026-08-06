@@ -19,9 +19,9 @@ import {
 } from '@inktrade/client';
 import type { RootStackParamList } from '../navigation';
 import { usePortfolio, usePortfolioHistory } from '../hooks/usePortfolio';
-import { broker } from '../lib/broker';
 import { PortfolioChart } from '../components/PortfolioChart';
 import { PositionRow } from '../components/PositionRow';
+import { API_BASE_URL } from '../lib/api';
 import { changeColor, colors, fonts, formatPercent, formatPrice, radii, spacing } from '../ui/theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -50,17 +50,17 @@ export function PortfolioScreen() {
       };
     }
     return {
-      value: portfolio.data?.totalValue ?? 0,
-      delta: portfolio.data?.dayChange ?? 0,
-      deltaPercent: portfolio.data?.dayChangePercent ?? 0,
+      value: portfolio.summary?.totalValue ?? 0,
+      delta: portfolio.summary?.dayChange ?? 0,
+      deltaPercent: portfolio.summary?.dayChangePercent ?? 0,
       caption: 'Today',
     };
-  }, [scrubbed, points, portfolio.data, period]);
+  }, [scrubbed, points, portfolio.summary, period]);
 
-  const positions = portfolio.data ? allPositions(portfolio.data) : [];
+  const positions = portfolio.summary ? allPositions(portfolio.summary) : [];
   const equities = positions.filter((p) => p.assetType !== 'OPTION');
   const options = positions.filter((p) => p.assetType === 'OPTION');
-  const cash = portfolio.data?.accounts.reduce((s, a) => s + a.balances.cashBalance, 0) ?? 0;
+  const cash = portfolio.summary?.accounts.reduce((s, a) => s + a.balances.cashBalance, 0) ?? 0;
 
   const onRefresh = useCallback(() => {
     portfolio.refetch();
@@ -100,7 +100,7 @@ export function PortfolioScreen() {
         </Text>
       </View>
 
-      <PortfolioChart points={points} onScrub={setScrubbed} height={170} />
+      <PortfolioChart points={points} onScrub={setScrubbed} height={170} placeholder />
 
       <View style={styles.periods}>
         {PORTFOLIO_PERIODS.map((p) => {
@@ -126,10 +126,24 @@ export function PortfolioScreen() {
         </View>
       )}
 
-      {broker.isMock && (
-        <View style={[styles.banner, styles.bannerMock]}>
-          <Text style={[styles.bannerText, styles.bannerMockText]}>
-            Sample data — no brokerage account is linked yet.
+      {/*
+        The curve and the holdings now come from different places: positions are
+        live, but no brokerage returns portfolio value history, so the chart is
+        still sample data. Saying "sample data" over the whole screen would be
+        wrong, and saying nothing would be worse.
+      */}
+      <View style={[styles.banner, styles.bannerMock]}>
+        <Text style={[styles.bannerText, styles.bannerMockText]}>
+          Holdings are live. The value curve is sample data — no brokerage reports
+          portfolio history, so a real one needs our own daily snapshots.
+        </Text>
+      </View>
+
+      {portfolio.error && (
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>
+            Couldn&apos;t reach the API at {API_BASE_URL}. Link a brokerage in Settings on the
+            web app, and check the dev server is running.
           </Text>
         </View>
       )}

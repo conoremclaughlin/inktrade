@@ -12,6 +12,15 @@ interface Props {
   height?: number;
   /** Fires with the scrubbed point, or null when the finger lifts. */
   onScrub?: (point: PortfolioPoint | null) => void;
+  /**
+   * The series is illustrative, not this account's history.
+   *
+   * Drawn in a neutral colour rather than green or red, because a rising green
+   * curve under a red daily loss reads as a contradiction — and worse, as a
+   * gain the account did not make. Shape and interaction survive; the claim
+   * about direction does not.
+   */
+  placeholder?: boolean;
 }
 
 /**
@@ -25,7 +34,7 @@ interface Props {
  * tooltip here: the number you're reading should be in the same place whether
  * or not you're touching the chart.
  */
-export function PortfolioChart({ points, height = 160, onScrub }: Props) {
+export function PortfolioChart({ points, height = 160, onScrub, placeholder }: Props) {
   const [width, setWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
@@ -68,7 +77,7 @@ export function PortfolioChart({ points, height = 160, onScrub }: Props) {
     };
   }, [points, width, height]);
 
-  const stroke = rising ? colors.emerald : colors.rose;
+  const stroke = placeholder ? colors.textMuted : rising ? colors.emerald : colors.rose;
 
   // Held in a ref so the responder callbacks don't need re-creating on every
   // scrub frame — that would tear down the gesture mid-drag.
