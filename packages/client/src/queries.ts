@@ -70,6 +70,8 @@ export const brokerKeys = {
   chain: (symbol: string, expiration?: string) =>
     ['broker', 'chain', symbol, expiration ?? 'nearest'] as const,
   contracts: (ids: string[]) => ['broker', 'contracts', [...ids].sort().join(',')] as const,
+  taxLots: (accountId: string, symbol: string) =>
+    ['broker', 'tax-lots', accountId, symbol] as const,
   watchlists: () => ['broker', 'watchlists'] as const,
   watchlist: (id: string) => ['broker', 'watchlist', id] as const,
   orders: (symbol?: string) => ['broker', 'orders', symbol ?? 'all'] as const,
@@ -127,6 +129,21 @@ export function optionContractsQuery(api: ApiClient, ids: string[], enabled: boo
     queryFn: () => api.getOptionContracts(ids),
     enabled: enabled && ids.length > 0,
     staleTime: CHAIN_STALE_MS,
+  };
+}
+
+/**
+ * Open lots for a holding.
+ *
+ * Short stale time: lots change on every fill, and a stale set would produce a
+ * selection the broker rejects because the shares have already moved.
+ */
+export function taxLotsQuery(api: ApiClient, accountId: string | null, symbol: string | null) {
+  return {
+    queryKey: brokerKeys.taxLots(accountId ?? '', symbol ?? ''),
+    queryFn: () => api.getTaxLots(accountId!, symbol!),
+    enabled: !!accountId && !!symbol,
+    staleTime: 15_000,
   };
 }
 

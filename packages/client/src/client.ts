@@ -13,6 +13,7 @@ import type {
   OrderActivity,
   PortfolioSummary,
 } from './broker/types.js';
+import type { TaxLot } from './tax-lots.js';
 
 /** What /api/portfolio returns — the summary plus which brokerage produced it. */
 export interface PortfolioResponse {
@@ -62,6 +63,7 @@ export interface ApiClient {
   getPortfolio(): Promise<PortfolioResponse>;
   getOptionChain(symbol: string, expiration?: string): Promise<OptionChain>;
   getOptionContracts(ids: string[]): Promise<{ contracts: OptionContract[] }>;
+  getTaxLots(accountId: string, symbol: string): Promise<{ symbol: string; lots: TaxLot[] }>;
   getBrokerWatchlists(): Promise<{ watchlists: BrokerWatchlist[] }>;
   getBrokerWatchlist(id: string): Promise<BrokerWatchlistDetail>;
   getOrderActivity(params?: { symbol?: string; limit?: number }): Promise<OrderActivityResponse>;
@@ -129,6 +131,11 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       return request<{ contracts: OptionContract[] }>(
         `/api/broker/chain/quotes?ids=${ids.join(',')}`,
       );
+    },
+
+    getTaxLots(accountId, symbol) {
+      const params = new URLSearchParams({ accountId, symbol });
+      return request<{ symbol: string; lots: TaxLot[] }>(`/api/broker/tax-lots?${params}`);
     },
 
     getBrokerWatchlists() {

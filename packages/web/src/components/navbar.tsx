@@ -82,6 +82,12 @@ export function Navbar() {
             Chain
           </a>
           <a
+            href="/lots"
+            className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
+          >
+            Lots
+          </a>
+          <a
             href="/strategies"
             className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
           >
