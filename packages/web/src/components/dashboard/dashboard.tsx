@@ -4,12 +4,14 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   allPositions,
+  brokerIdOf,
   optionLabel,
   type BrokerWatchlist,
   type Position,
   type Quote,
 } from '@inktrade/client';
 import { Navbar } from '@/components/navbar';
+import { AssignmentBanner } from '@/components/trade/assignment-banner';
 import {
   useBrokerQuotes,
   useBrokerWatchlist,
@@ -71,6 +73,15 @@ export function Dashboard() {
                 cash={cash}
                 buyingPower={buyingPower}
                 loading={portfolio.isLoading}
+              />
+
+              {/*
+                Above the lists: the only thing on this page with a same-day
+                deadline shouldn't sit below what you're merely browsing.
+              */}
+              <AssignmentBanner
+                positions={positions}
+                broker={brokerIdOf(portfolio.data?.provider)}
               />
 
               <section>
