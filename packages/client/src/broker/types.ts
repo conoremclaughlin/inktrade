@@ -83,12 +83,45 @@ export interface PortfolioSummary {
   accounts: BrokerageAccount[];
 }
 
+export type OrderSide = 'BUY' | 'SELL';
+
+export type OrderStatus = 'FILLED' | 'PARTIAL' | 'OPEN' | 'CANCELLED' | 'REJECTED';
+
+/**
+ * One action taken on a symbol — a share trade, an option trade, a future.
+ *
+ * This is the per-ticker history: rather than filtering one global activity
+ * feed, a ticker screen asks for its own actions and gets only those.
+ */
+export interface OrderActivity {
+  id: string;
+  /** Underlying ticker, so an option order files under its underlying. */
+  symbol: string;
+  assetType: AssetType;
+  side: OrderSide;
+  status: OrderStatus;
+  quantity: number;
+  /** Average fill price. Null while an order is still working. */
+  price: number | null;
+  /** ISO timestamp of the fill, or of submission when unfilled. */
+  timestamp: string;
+  /** Present for option orders — lets the UI show strike and expiry. */
+  option?: OptionDetail;
+}
+
 export interface BrokerProvider {
   readonly name: string;
   /** True for the mock — lets the UI say so rather than quietly showing fiction. */
   readonly isMock: boolean;
   getPortfolio(): Promise<PortfolioSummary>;
   getPortfolioHistory(period: PortfolioPeriod): Promise<PortfolioHistory>;
+  /**
+   * Actions taken, newest first — optionally narrowed to one symbol.
+   *
+   * Optional because not every brokerage exposes order history, and a provider
+   * that can't should be missing the method rather than returning a lie.
+   */
+  getOrders?(params?: { symbol?: string; limit?: number }): Promise<OrderActivity[]>;
 }
 
 /** Flatten positions across accounts — most views don't care which account. */
