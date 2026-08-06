@@ -321,6 +321,47 @@ export class RobinhoodBroker implements BrokerProvider, TradingProvider, MarketD
     return { symbol: upper, expiration: target, expirations, underlyingPrice, contracts };
   }
 
+  /**
+   * Price contracts by id, for strikes outside the window a chain priced.
+   *
+   * Instrument definitions are immutable and cached for a day, so the marginal
+   * cost of a scroll-in is the quote call alone.
+   */
+  async getOptionContracts(ids: string[]): Promise<OptionContract[]> {
+    const wanted = [...new Set(ids.filter(Boolean))];
+    if (wanted.length === 0) return [];
+
+    const [instruments, priced] = await Promise.all([
+      this.fetchOptionInstrumentsById(wanted),
+      this.fetchContractQuotes(wanted),
+    ]);
+
+    return wanted
+      .map((id) => {
+        const instrument = instruments.get(id);
+        if (!instrument) return null;
+        const entry = priced.get(id);
+        return normalizeContract(instrument, entry?.quote, entry?.close);
+      })
+      .filter((c): c is OptionContract => c !== null);
+  }
+
+  private async fetchOptionInstrumentsById(
+    ids: string[],
+  ): Promise<Map<string, Record<string, unknown>>> {
+    const byId = new Map<string, Record<string, unknown>>();
+
+    for (const batch of chunk(ids, QUOTE_BATCH)) {
+      const raw = await this.read<unknown>('get_option_instruments', { ids: batch.join(',') });
+      for (const instrument of asArray(raw, 'instruments')) {
+        const id = str(instrument, 'id');
+        if (id) byId.set(id, instrument);
+      }
+    }
+
+    return byId;
+  }
+
   async getWatchlists(): Promise<BrokerWatchlist[]> {
     const raw = await this.read<unknown>('get_watchlists');
     return asArray(raw, 'watchlists')

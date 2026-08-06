@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { OptionChain, OptionContract } from '@inktrade/client';
+import { useChainQuotes } from '@/lib/use-chain-quotes';
 
 interface Props {
   chain: OptionChain;
@@ -25,7 +26,15 @@ interface StrikeRow {
  * left/right symmetry that makes a chain scannable.
  */
 export function OptionChainTable({ chain, isFetching }: Props) {
-  const rows = useMemo(() => pricedRows(toStrikeRows(chain.contracts)), [chain.contracts]);
+  const { priced, revealContract, isLoadingContract } = useChainQuotes(chain.contracts);
+
+  // The full ladder, with scroll-loaded prices merged over the ones the chain
+  // arrived with. Rendering every strike is the point — the ladder is the map,
+  // and hiding the parts we haven't priced yet would hide where you can go.
+  const rows = useMemo(
+    () => toStrikeRows(chain.contracts.map((c) => priced.get(c.id) ?? c)),
+    [chain.contracts, priced],
+  );
 
   // Where the money is. Rendered as a band between rows rather than a
   // highlighted row, because spot sits *between* strikes far more often than
@@ -34,6 +43,22 @@ export function OptionChainTable({ chain, isFetching }: Props) {
     () => (chain.underlyingPrice === null ? -1 : firstStrikeAbove(rows, chain.underlyingPrice)),
     [rows, chain.underlyingPrice],
   );
+
+  // Open at the money. Spot is where a chain is read from, and with hundreds
+  // of strikes listed the default scroll position would otherwise be a screen
+  // of deep out-of-the-money contracts hundreds of dollars away.
+  const scrollBox = useRef<HTMLDivElement>(null);
+  const anchored = useRef(false);
+  useEffect(() => {
+    if (anchored.current || spotIndex < 0 || !scrollBox.current) return;
+    const target = scrollBox.current.querySelector<HTMLElement>('[data-at-the-money="true"]');
+    if (!target) return;
+    scrollBox.current.scrollTop = Math.max(
+      0,
+      target.offsetTop - scrollBox.current.clientHeight / 2,
+    );
+    anchored.current = true;
+  }, [spotIndex, rows.length]);
 
   if (rows.length === 0) {
     return (
@@ -46,9 +71,12 @@ export function OptionChainTable({ chain, isFetching }: Props) {
   }
 
   return (
-    <div className={`overflow-x-auto transition-opacity ${isFetching ? 'opacity-50' : ''}`}>
+    <div
+      ref={scrollBox}
+      className={`max-h-[70vh] overflow-auto transition-opacity ${isFetching ? 'opacity-50' : ''}`}
+    >
       <table className="w-full min-w-[900px] border-collapse text-[12px] font-mono">
-        <thead>
+        <thead className="sticky top-0 z-10 bg-void">
           <tr className="border-b border-border-subtle">
             <th colSpan={5} className="py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald">
               Calls
@@ -76,22 +104,72 @@ export function OptionChainTable({ chain, isFetching }: Props) {
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr
+            <StrikeRowView
               key={row.strike}
-              className={`border-b border-border-subtle/40 hover:bg-surface/40 ${
-                i === spotIndex ? 'border-t-2 border-t-accent/60' : ''
-              }`}
-            >
-              <ContractCells contract={row.call} side="call" />
-              <td className="px-3 py-1.5 text-center font-semibold text-text-primary tabular-nums">
-                {formatStrike(row.strike)}
-              </td>
-              <ContractCells contract={row.put} side="put" />
-            </tr>
+              row={row}
+              atTheMoney={i === spotIndex}
+              onVisible={revealContract}
+              isLoading={isLoadingContract}
+            />
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * One strike, which asks for its own prices when it scrolls into view.
+ *
+ * The observer is per-row rather than per-chunk so the request fires on what
+ * the reader is actually looking at, with a generous rootMargin so prices are
+ * usually already there by the time the row is on screen.
+ */
+function StrikeRowView({
+  row,
+  atTheMoney,
+  onVisible,
+  isLoading,
+}: {
+  row: StrikeRow;
+  atTheMoney: boolean;
+  onVisible: (id: string) => void;
+  isLoading: (id: string) => boolean;
+}) {
+  const ref = useRef<HTMLTableRowElement>(null);
+  const ids = [row.call?.id, row.put?.id].filter((id): id is string => Boolean(id));
+  const needsQuote = row.call?.mark === null || row.put?.mark === null;
+
+  useEffect(() => {
+    if (!needsQuote || !ref.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) ids.forEach(onVisible);
+      },
+      { rootMargin: '400px' },
+    );
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsQuote, ids.join(','), onVisible]);
+
+  const loading = ids.some(isLoading);
+
+  return (
+    <tr
+      ref={ref}
+      data-at-the-money={atTheMoney || undefined}
+      className={`border-b border-border-subtle/40 hover:bg-surface/40 ${
+        atTheMoney ? 'border-t-2 border-t-accent/60' : ''
+      } ${loading ? 'animate-pulse' : ''}`}
+    >
+      <ContractCells contract={row.call} side="call" />
+      <td className="px-3 py-1.5 text-center font-semibold text-text-primary tabular-nums">
+        {formatStrike(row.strike)}
+      </td>
+      <ContractCells contract={row.put} side="put" />
+    </tr>
   );
 }
 
@@ -163,23 +241,4 @@ export function firstStrikeAbove(rows: StrikeRow[], price: number): number {
   return rows.findIndex((row) => row.strike > price);
 }
 
-/**
- * Narrow to the strikes that actually carry a quote.
- *
- * A liquid underlying lists hundreds of strikes and the API prices only a
- * window around spot, so rendering the full ladder opens the table on a
- * screenful of em-dashes hundreds of dollars from the money — the chain looks
- * broken rather than deep. Showing the priced band puts the money on screen,
- * which is where a chain is read from.
- *
- * If nothing is priced at all — a dead expiration, or quotes unavailable — the
- * full ladder is returned rather than an empty table, so the strikes are still
- * legible even when the prices aren't.
- */
-export function pricedRows(rows: StrikeRow[]): StrikeRow[] {
-  const priced = rows.filter(
-    (row) => row.call?.mark !== null && row.call?.mark !== undefined
-      || (row.put?.mark !== null && row.put?.mark !== undefined),
-  );
-  return priced.length > 0 ? priced : rows;
-}
+

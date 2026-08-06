@@ -9,6 +9,7 @@ import type {
   BrokerWatchlist,
   BrokerWatchlistDetail,
   OptionChain,
+  OptionContract,
   OrderActivity,
   PortfolioSummary,
 } from './broker/types.js';
@@ -60,6 +61,7 @@ export interface ApiClient {
   getBrokerQuotes(symbols: string[]): Promise<QuotesResponse>;
   getPortfolio(): Promise<PortfolioResponse>;
   getOptionChain(symbol: string, expiration?: string): Promise<OptionChain>;
+  getOptionContracts(ids: string[]): Promise<{ contracts: OptionContract[] }>;
   getBrokerWatchlists(): Promise<{ watchlists: BrokerWatchlist[] }>;
   getBrokerWatchlist(id: string): Promise<BrokerWatchlistDetail>;
   getOrderActivity(params?: { symbol?: string; limit?: number }): Promise<OrderActivityResponse>;
@@ -120,6 +122,13 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       const params = new URLSearchParams({ symbol });
       if (expiration) params.set('expiration', expiration);
       return request<OptionChain>(`/api/broker/chain?${params}`);
+    },
+
+    getOptionContracts(ids) {
+      if (ids.length === 0) return Promise.resolve({ contracts: [] });
+      return request<{ contracts: OptionContract[] }>(
+        `/api/broker/chain/quotes?ids=${ids.join(',')}`,
+      );
     },
 
     getBrokerWatchlists() {

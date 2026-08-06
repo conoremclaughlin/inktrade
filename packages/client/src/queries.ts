@@ -2,6 +2,9 @@ import type { ApiClient } from './client.js';
 import type { HistoryPeriod } from './types.js';
 import type { OptionChain } from './broker/types.js';
 
+/** Upstream quote batch limit — chunk sizing must match it. */
+export const OPTION_QUOTE_BATCH = 20;
+
 /**
  * Query keys and options shared by web and mobile.
  *
@@ -66,6 +69,7 @@ export const brokerKeys = {
   quotes: (symbols: string[]) => ['broker', 'quotes', [...symbols].sort().join(',')] as const,
   chain: (symbol: string, expiration?: string) =>
     ['broker', 'chain', symbol, expiration ?? 'nearest'] as const,
+  contracts: (ids: string[]) => ['broker', 'contracts', [...ids].sort().join(',')] as const,
   watchlists: () => ['broker', 'watchlists'] as const,
   watchlist: (id: string) => ['broker', 'watchlist', id] as const,
   orders: (symbol?: string) => ['broker', 'orders', symbol ?? 'all'] as const,
@@ -107,6 +111,22 @@ export function optionChainQuery(api: ApiClient, symbol: string | null, expirati
     // Keep the previous expiration on screen while the next one loads, so
     // stepping through the ladder doesn't blank the table each time.
     placeholderData: (prev: OptionChain | undefined) => prev,
+  };
+}
+
+/**
+ * Prices for one batch of contracts, fetched when its strikes come into view.
+ *
+ * Keyed by the sorted id list so two chunks that happen to overlap share a
+ * cache entry, and gated on `enabled` so nothing is requested until the reader
+ * actually scrolls there.
+ */
+export function optionContractsQuery(api: ApiClient, ids: string[], enabled: boolean) {
+  return {
+    queryKey: brokerKeys.contracts(ids),
+    queryFn: () => api.getOptionContracts(ids),
+    enabled: enabled && ids.length > 0,
+    staleTime: CHAIN_STALE_MS,
   };
 }
 

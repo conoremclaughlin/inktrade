@@ -119,8 +119,8 @@ function ChainContent() {
 
           {data && (
             <p className="mt-3 text-[11px] text-text-muted">
-              Showing strikes around the money. {data.contracts.length} contracts listed for
-              this expiration across {data.expirations.length} available dates.
+              {data.contracts.length} contracts across {data.expirations.length} expirations.
+              Opens at the money; prices load as you scroll.
             </p>
           )}
         </div>

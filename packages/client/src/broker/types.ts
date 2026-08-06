@@ -188,6 +188,14 @@ export interface MarketDataProvider {
   getOptionExpirations(symbol: string): Promise<string[]>;
   /** Omit `expiration` for the nearest one. */
   getOptionChain(symbol: string, expiration?: string): Promise<OptionChain>;
+  /**
+   * Price specific contracts by id.
+   *
+   * A chain returns every contract definition but prices only a window, so
+   * this fills in the rest as the reader scrolls toward it — paying for the
+   * strikes actually looked at rather than the whole ladder up front.
+   */
+  getOptionContracts(ids: string[]): Promise<OptionContract[]>;
   getWatchlists(): Promise<BrokerWatchlist[]>;
   getWatchlist(id: string): Promise<BrokerWatchlistDetail>;
 }
