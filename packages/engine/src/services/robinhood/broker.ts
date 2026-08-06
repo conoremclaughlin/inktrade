@@ -439,6 +439,7 @@ export class RobinhoodBroker implements BrokerProvider, TradingProvider, MarketD
     assertTradable(request.accountId, await this.tradableAccountIds());
     return normalizeReview(
       await callToolJson<unknown>(this.client, 'review_equity_order', args),
+      request,
     );
   }
 

@@ -241,14 +241,41 @@ export interface OrderRequest {
   taxLots?: { lotId: string; quantity: number }[];
 }
 
+/** Which price produced an estimate, so the UI can label it honestly. */
+export type EstimateBasis = 'NOTIONAL' | 'LIMIT' | 'STOP' | 'ASK' | 'BID' | 'LAST';
+
 /** A pre-trade check: what it would cost and what the broker objects to. */
 export interface OrderReview {
+  /**
+   * What the order would cost, in dollars.
+   *
+   * Computed here rather than reported by the broker — Robinhood's review
+   * returns a quote and its alerts but no cost figure at all. Fees are not
+   * included, and a market order is an estimate against the current spread,
+   * so this is a guide and not a promise. Null when nothing can be priced.
+   */
   estimatedCost: number | null;
-  /** Broker-side alerts — buying power, pattern day trading, halts. */
-  warnings: string[];
-  /** False when the broker says it would refuse the order outright. */
-  acceptable: boolean;
+  /** How estimatedCost was derived. Null whenever estimatedCost is. */
+  estimateBasis: EstimateBasis | null;
+  /** Last trade price at review time. */
   quotePrice: number | null;
+  bid: number | null;
+  ask: number | null;
+  previousClose: number | null;
+  /** Broker-side alerts — buying power, unmarketable price, halts. */
+  warnings: string[];
+  /** The broker's machine-readable alert code, when it raised one. */
+  alertType?: string;
+  /**
+   * The broker's quote disclosure.
+   *
+   * Must be rendered verbatim and unmodified anywhere the review is shown —
+   * Robinhood requires it as the compliance disclosure for displaying their
+   * market data. Not ours to paraphrase, shorten or restyle.
+   */
+  disclosure?: string;
+  /** False when we recognise an alert that means the order cannot proceed. */
+  acceptable: boolean;
 }
 
 export interface OrderReceipt {

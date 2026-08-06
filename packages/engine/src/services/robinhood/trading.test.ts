@@ -154,38 +154,208 @@ describe('buildOrderArgs', () => {
   });
 });
 
+/**
+ * Captured from a live `review_equity_order` on 2026-08-06, trimmed only of
+ * the venue timestamps. Every earlier version of these tests was written from
+ * the tool description and asserted field names that do not exist.
+ */
+const QUOTE_DATA = {
+  symbol: 'F',
+  last_trade_price: '13.785000',
+  last_non_reg_trade_price: '13.790100',
+  adjusted_previous_close: '14.130000',
+  previous_close: '14.130000',
+  bid_price: '13.780000',
+  ask_price: '13.790000',
+  has_traded: true,
+  state: 'active',
+};
+
+const DISCLOSURE = 'Bid $13.78 × 3100 Q · Ask $13.79 × 100 Q · Last $13.79 × 258. Updated 5:01 PM ET.';
+
+const fordBuy: OrderRequest = {
+  accountId: '859249179',
+  symbol: 'F',
+  side: 'BUY',
+  type: 'LIMIT',
+  quantity: 1,
+  limitPrice: 13.7,
+};
+
+function reviewPayload(orderChecks: Record<string, unknown> = {}) {
+  return {
+    data: {
+      symbol: 'F',
+      side: 'buy',
+      type: 'limit',
+      quantity: '1',
+      order_checks: orderChecks,
+      quote_data: QUOTE_DATA,
+      market_data_disclosure: DISCLOSURE,
+    },
+    guide: '',
+  };
+}
+
 describe('normalizeReview', () => {
-  it('reads cost, quote and alerts', () => {
-    const review = normalizeReview({
-      data: {
-        estimated_cost: '1781.00',
-        quote: { last_trade_price: '890.50' },
-        alerts: [{ message: 'Insufficient buying power' }, 'Pattern day trading'],
-      },
-      guide: '',
+  it('reads the quote out of quote_data, which is where it actually lives', () => {
+    const review = normalizeReview(reviewPayload(), fordBuy);
+
+    expect(review.quotePrice).toBe(13.785);
+    expect(review.bid).toBe(13.78);
+    expect(review.ask).toBe(13.79);
+    expect(review.previousClose).toBe(14.13);
+  });
+
+  it('carries the compliance disclosure through untouched', () => {
+    // Robinhood requires this string be shown verbatim wherever their market
+    // data is displayed. Any edit here is a compliance problem, not a style one.
+    expect(normalizeReview(reviewPayload(), fordBuy).disclosure).toBe(DISCLOSURE);
+  });
+
+  it('treats an empty order_checks as no alerts', () => {
+    const review = normalizeReview(reviewPayload({}), fordBuy);
+    expect(review.warnings).toEqual([]);
+    expect(review.alertType).toBeUndefined();
+    expect(review.acceptable).toBe(true);
+  });
+
+  describe('estimated cost — the number shown before real money moves', () => {
+    it('prices a limit order at the limit the user chose', () => {
+      const review = normalizeReview(reviewPayload(), fordBuy);
+      expect(review.estimatedCost).toBeCloseTo(13.7, 10);
+      expect(review.estimateBasis).toBe('LIMIT');
     });
 
-    expect(review.estimatedCost).toBe(1781);
-    expect(review.quotePrice).toBe(890.5);
-    expect(review.warnings).toEqual(['Insufficient buying power', 'Pattern day trading']);
+    it('prices a market buy at the ask it would have to cross', () => {
+      const review = normalizeReview(reviewPayload(), {
+        ...fordBuy,
+        type: 'MARKET',
+        quantity: 100,
+        limitPrice: undefined,
+      });
+      expect(review.estimatedCost).toBeCloseTo(1379, 10);
+      expect(review.estimateBasis).toBe('ASK');
+    });
+
+    it('prices a market sell at the bid, not the last trade', () => {
+      // Using the last trade for both sides would understate every buy and
+      // overstate every sell — always in the direction that flatters the order.
+      const review = normalizeReview(reviewPayload(), {
+        ...fordBuy,
+        side: 'SELL',
+        type: 'MARKET',
+        quantity: 100,
+        limitPrice: undefined,
+      });
+      expect(review.estimatedCost).toBeCloseTo(1378, 10);
+      expect(review.estimateBasis).toBe('BID');
+    });
+
+    it('takes a dollar order at its word', () => {
+      const review = normalizeReview(reviewPayload(), {
+        ...fordBuy,
+        type: 'MARKET',
+        quantity: undefined,
+        notional: 250,
+        limitPrice: undefined,
+      });
+      expect(review.estimatedCost).toBe(250);
+      expect(review.estimateBasis).toBe('NOTIONAL');
+    });
+
+    it('anchors a stop order to its trigger', () => {
+      const review = normalizeReview(reviewPayload(), {
+        ...fordBuy,
+        type: 'STOP',
+        stopPrice: 12.5,
+        quantity: 10,
+        limitPrice: undefined,
+      });
+      expect(review.estimatedCost).toBeCloseTo(125, 10);
+      expect(review.estimateBasis).toBe('STOP');
+    });
+
+    it('reports null rather than zero when nothing can be priced', () => {
+      // A zero would render as a real, free order.
+      const review = normalizeReview({ data: {}, guide: '' }, {
+        ...fordBuy,
+        type: 'MARKET',
+        limitPrice: undefined,
+      });
+      expect(review.estimatedCost).toBeNull();
+      expect(review.estimateBasis).toBeNull();
+      expect(review.quotePrice).toBeNull();
+    });
   });
 
-  it('treats an alert as information, not a block', () => {
-    // "You are using margin" should not stop an order the user meant to place.
-    expect(normalizeReview({ data: { alerts: ['Using margin'] }, guide: '' }).acceptable).toBe(
-      true,
-    );
-  });
+  describe('alerts', () => {
+    it('explains an insufficient-buying-power alert with its number intact', () => {
+      const review = normalizeReview(
+        reviewPayload({
+          alertType: 'EQUITY_NOT_ENOUGH_BP',
+          equityNotEnoughBpAlertDetails: {
+            depositAmount: { amount: '144695.0300', currency: 'USD' },
+            brokerageAccountType: 'INDIVIDUAL',
+          },
+        }),
+        fordBuy,
+      );
 
-  it('marks an explicit refusal as unacceptable', () => {
-    expect(normalizeReview({ data: { acceptable: false }, guide: '' }).acceptable).toBe(false);
-    expect(normalizeReview({ data: { rejected: true }, guide: '' }).acceptable).toBe(false);
-  });
+      expect(review.alertType).toBe('EQUITY_NOT_ENOUGH_BP');
+      expect(review.warnings[0]).toMatch(/\$144,695\.03/);
+      expect(review.acceptable).toBe(false);
+    });
 
-  it('reports missing figures as null rather than zero', () => {
-    const review = normalizeReview({ data: {}, guide: '' });
-    expect(review.estimatedCost).toBeNull();
-    expect(review.quotePrice).toBeNull();
+    it('explains an unmarketable limit without blocking it', () => {
+      // Robinhood will happily accept this order; it just won't fill. Refusing
+      // it ourselves would be us overruling the user on their own limit price.
+      const review = normalizeReview(
+        reviewPayload({
+          alertType: 'EQUITY_EXTREMELY_UNMARKETABLE_LIMIT_PRICE',
+          equityExtremelyUnmarketableLimitPriceAlertDetails: {
+            enteredPrice: { amount: '1.0000', currency: 'USD' },
+            lastTradePrice: { amount: '13.7901', currency: 'USD' },
+            side: 'BUY',
+          },
+        }),
+        { ...fordBuy, limitPrice: 1 },
+      );
+
+      expect(review.warnings[0]).toMatch(/\$1\.00/);
+      expect(review.warnings[0]).toMatch(/\$13\.79/);
+      expect(review.acceptable).toBe(true);
+    });
+
+    it('surfaces an alert it has never seen rather than dropping it', () => {
+      // The failure mode being prevented: a new alert type ships, we don't
+      // recognise it, and the one thing the broker went out of its way to say
+      // silently disappears.
+      const review = normalizeReview(
+        reviewPayload({
+          alertType: 'EQUITY_SOMETHING_BRAND_NEW',
+          equitySomethingBrandNewAlertDetails: {
+            shortfall: { amount: '42.5000', currency: 'USD' },
+            reason: 'HALTED',
+          },
+        }),
+        fordBuy,
+      );
+
+      expect(review.warnings[0]).toContain('EQUITY_SOMETHING_BRAND_NEW');
+      expect(review.warnings[0]).toContain('$42.50');
+      expect(review.warnings[0]).toContain('HALTED');
+      // Unknown means unknown — surfaced, not treated as a refusal.
+      expect(review.acceptable).toBe(true);
+    });
+
+    it('still reports an alert that arrives with no details', () => {
+      const review = normalizeReview(
+        reviewPayload({ alertType: 'EQUITY_MYSTERY' }),
+        fordBuy,
+      );
+      expect(review.warnings).toEqual(['EQUITY_MYSTERY']);
+    });
   });
 });
 

@@ -39,11 +39,22 @@ const ACCOUNTS = {
   guide: '',
 };
 
+/** Shaped like a real review response — no cost field, quote under quote_data. */
 const REVIEW = {
   data: {
-    estimated_cost: '178.10',
-    quote: { last_trade_price: '89.05' },
-    alerts: [{ message: 'This is a cash account' }],
+    symbol: 'MU',
+    side: 'buy',
+    type: 'limit',
+    quantity: '2',
+    order_checks: {},
+    quote_data: {
+      symbol: 'MU',
+      last_trade_price: '89.050000',
+      bid_price: '89.000000',
+      ask_price: '89.100000',
+      previous_close: '88.000000',
+    },
+    market_data_disclosure: 'Bid $89.00 × 100 Q · Ask $89.10 × 100 Q · Last $89.05 × 50.',
   },
   guide: '',
 };
@@ -135,9 +146,16 @@ describe('trading over a real MCP connection', () => {
     const review = await (await broker()).reviewOrder(order);
 
     expect(review).toEqual({
+      // 2 shares at the $89.05 limit the order carries — computed here, since
+      // the broker returns no cost of its own.
       estimatedCost: 178.1,
+      estimateBasis: 'LIMIT',
       quotePrice: 89.05,
-      warnings: ['This is a cash account'],
+      bid: 89,
+      ask: 89.1,
+      previousClose: 88,
+      warnings: [],
+      disclosure: 'Bid $89.00 × 100 Q · Ask $89.10 × 100 Q · Last $89.05 × 50.',
       acceptable: true,
     });
     expect(server!.callsTo('place_equity_order')).toHaveLength(0);
