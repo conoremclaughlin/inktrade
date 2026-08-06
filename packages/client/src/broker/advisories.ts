@@ -15,7 +15,7 @@
  * morning is worth nothing.
  */
 
-import type { OptionDetail, OrderSide } from './types.js';
+import type { OptionDetail, OrderSide, Position } from './types.js';
 
 export type BrokerId = 'robinhood' | 'schwab' | 'mock';
 
@@ -151,5 +151,49 @@ export function alternativeToExercise(input: {
     tradeoff:
       'Closing the call costs its remaining time value. Worth it when the tax saved on the ' +
       'share sale is larger than that cost — compare the two before deciding.',
+  };
+}
+
+/** Option positions whose exercise or assignment would sell shares. */
+export interface AssignmentExposure {
+  positions: Position[];
+  /** Soonest expiration among them (ISO date), or null when there are none. */
+  nextExpiration: string | null;
+}
+
+/**
+ * Which holdings carry FIFO exposure, soonest first.
+ *
+ * Aggregated deliberately. Attaching a full advisory to each affected position
+ * produced THIRTY-SEVEN identical red cards on one portfolio — which is not a
+ * warning, it is wallpaper, and it teaches people to scroll past the thing
+ * that has a same-day deadline. One summary that counts them, sorted by what
+ * expires first, is the version somebody actually reads.
+ *
+ * Sorted by expiration because that is when the risk becomes real: a put
+ * expiring Friday matters more than one expiring in March.
+ */
+export function assignmentExposure(
+  positions: Position[],
+  broker: BrokerId,
+): AssignmentExposure {
+  if (broker !== 'robinhood') return { positions: [], nextExpiration: null };
+
+  const exposed = positions
+    .filter(
+      (p) =>
+        p.assetType === 'OPTION' &&
+        p.option !== undefined &&
+        p.quantity !== 0 &&
+        disposesShares({
+          putCall: p.option.putCall,
+          side: p.quantity >= 0 ? 'BUY' : 'SELL',
+        }),
+    )
+    .sort((a, b) => (a.option?.expiration ?? '').localeCompare(b.option?.expiration ?? ''));
+
+  return {
+    positions: exposed,
+    nextExpiration: exposed[0]?.option?.expiration ?? null,
   };
 }

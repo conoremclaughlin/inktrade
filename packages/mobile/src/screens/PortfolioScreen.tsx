@@ -22,7 +22,7 @@ import type { RootStackParamList } from '../navigation';
 import { usePortfolio, usePortfolioHistory } from '../hooks/usePortfolio';
 import { PortfolioChart } from '../components/PortfolioChart';
 import { PositionRow } from '../components/PositionRow';
-import { ExerciseAdvisory } from '../components/ExerciseAdvisory';
+import { AssignmentBanner } from '../components/AssignmentBanner';
 import { API_BASE_URL } from '../lib/api';
 import { changeColor, colors, fonts, formatPercent, formatPrice, radii, spacing } from '../ui/theme';
 
@@ -150,6 +150,12 @@ export function PortfolioScreen() {
         </View>
       )}
 
+      {/*
+        Above the holdings, not buried among them: this is the only thing on
+        the screen with a same-day deadline.
+      */}
+      <AssignmentBanner positions={positions} broker={brokerIdOf(portfolio.provider)} />
+
       <Section title="Holdings" count={equities.length} />
       {equities.map((p) => (
         <PositionRow
@@ -165,28 +171,17 @@ export function PortfolioScreen() {
 
       {options.length > 0 && <Section title="Options" count={options.length} />}
       {options.map((p) => (
-        <View key={p.symbol + p.option!.expiration}>
-          <PositionRow
-            symbol={p.option ? optionLabel(p.option) : p.symbol}
-            detail={`${p.quantity > 0 ? '+' : ''}${p.quantity} contracts · avg $${formatPrice(p.averagePrice)}`}
-            value={p.marketValue}
-            changePercent={p.dayChangePercent}
-            currency
-            onPress={() =>
-              navigation.navigate('Stock', { symbol: p.option?.underlyingSymbol ?? p.symbol })
-            }
-          />
-          {/*
-            The advisory belongs HERE, not only on the trade screen. It carries
-            a same-day deadline, and a warning you only see after searching for
-            the symbol is a warning you miss on the day it matters.
-          */}
-          <ExerciseAdvisory
-            broker={brokerIdOf(portfolio.provider)}
-            option={p.option!}
-            side={p.quantity >= 0 ? 'BUY' : 'SELL'}
-          />
-        </View>
+        <PositionRow
+          key={p.symbol + p.option!.expiration}
+          symbol={p.option ? optionLabel(p.option) : p.symbol}
+          detail={`${p.quantity > 0 ? '+' : ''}${p.quantity} contracts · avg $${formatPrice(p.averagePrice)}`}
+          value={p.marketValue}
+          changePercent={p.dayChangePercent}
+          currency
+          onPress={() =>
+            navigation.navigate('Stock', { symbol: p.option?.underlyingSymbol ?? p.symbol })
+          }
+        />
       ))}
 
       <Section title="Cash" />

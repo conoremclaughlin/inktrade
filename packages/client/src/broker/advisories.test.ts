@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   alternativeToExercise,
+  assignmentExposure,
   brokerIdOf,
   disposesShares,
   exerciseAdvisory,
 } from './advisories.js';
+import type { Position } from './types.js';
 
 describe('brokerIdOf', () => {
   it.each([
@@ -87,5 +89,73 @@ describe('alternativeToExercise', () => {
 
   it('offers nothing when nothing is being disposed of', () => {
     expect(alternativeToExercise({ putCall: 'CALL', side: 'BUY' })).toBeNull();
+  });
+});
+
+describe('assignmentExposure', () => {
+  const option = (
+    symbol: string,
+    putCall: 'PUT' | 'CALL',
+    quantity: number,
+    expiration: string,
+  ): Position => ({
+    symbol,
+    assetType: 'OPTION',
+    quantity,
+    averagePrice: 1,
+    marketValue: 1,
+    dayChange: 0,
+    dayChangePercent: 0,
+    option: { underlyingSymbol: symbol, putCall, strike: 100, expiration, multiplier: 100 },
+  });
+
+  const equity: Position = {
+    symbol: 'SOXL',
+    assetType: 'EQUITY',
+    quantity: 100,
+    averagePrice: 1,
+    marketValue: 1,
+    dayChange: 0,
+    dayChangePercent: 0,
+  };
+
+  it('picks out only the positions that would sell shares', () => {
+    const exposure = assignmentExposure(
+      [
+        equity,
+        option('A', 'PUT', 5, '2026-09-18'), // long put — sells shares
+        option('B', 'PUT', -5, '2026-09-18'), // short put — acquires
+        option('C', 'CALL', -5, '2026-09-18'), // short call — sells shares
+        option('D', 'CALL', 5, '2026-09-18'), // long call — acquires
+      ],
+      'robinhood',
+    );
+
+    expect(exposure.positions.map((p) => p.symbol)).toEqual(['A', 'C']);
+  });
+
+  it('sorts by what expires first, because that is when it becomes real', () => {
+    const exposure = assignmentExposure(
+      [
+        option('LATE', 'PUT', 1, '2026-12-18'),
+        option('SOON', 'PUT', 1, '2026-08-07'),
+        option('MID', 'PUT', 1, '2026-09-18'),
+      ],
+      'robinhood',
+    );
+
+    expect(exposure.positions.map((p) => p.symbol)).toEqual(['SOON', 'MID', 'LATE']);
+    expect(exposure.nextExpiration).toBe('2026-08-07');
+  });
+
+  it('ignores a closed position', () => {
+    expect(assignmentExposure([option('A', 'PUT', 0, '2026-09-18')], 'robinhood').positions)
+      .toEqual([]);
+  });
+
+  it('stays silent for a broker that handles specified lots properly', () => {
+    const exposure = assignmentExposure([option('A', 'PUT', 5, '2026-09-18')], 'schwab');
+    expect(exposure.positions).toEqual([]);
+    expect(exposure.nextExpiration).toBeNull();
   });
 });
