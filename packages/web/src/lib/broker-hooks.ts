@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import {
+  brokerQuotesQuery,
   brokerWatchlistQuery,
   brokerWatchlistsQuery,
   optionChainQuery,
@@ -35,6 +36,11 @@ export function useBrokerWatchlists() {
 
 export function useBrokerWatchlist(id: string | null) {
   return useQuery(brokerWatchlistQuery(brokerApi, id));
+}
+
+/** Live prices for a set of symbols. Idle until there is something to price. */
+export function useBrokerQuotes(symbols: string[]) {
+  return useQuery(brokerQuotesQuery(brokerApi, symbols));
 }
 
 export function useOrderActivity(symbol?: string, limit?: number) {
