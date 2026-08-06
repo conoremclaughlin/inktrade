@@ -410,7 +410,7 @@ export function normalizeEquityPosition(
     // worthless holding because dayChange is zero too and the quote is absent.
     marketValue: mark ? mark.price * quantity : 0,
     dayChange: mark ? (mark.price - mark.previousClose) * quantity : 0,
-    dayChangePercent: mark ? percentMove(mark) : 0,
+    dayChangePercent: mark ? positionReturn(mark, quantity, 1) : 0,
   };
 }
 
@@ -440,17 +440,27 @@ export function normalizeOptionPosition(
     averagePrice,
     marketValue: mark ? mark.price * multiplier * quantity : 0,
     dayChange: mark ? (mark.price - mark.previousClose) * multiplier * quantity : 0,
-    dayChangePercent: mark ? percentMove(mark) : 0,
+    dayChangePercent: mark ? positionReturn(mark, quantity, multiplier) : 0,
     ...(detail
       ? { option: { ...detail, underlyingSymbol: detail.underlyingSymbol || underlying } }
       : {}),
   };
 }
 
-function percentMove(mark: Mark): number {
-  return mark.previousClose === 0
-    ? 0
-    : ((mark.price - mark.previousClose) / mark.previousClose) * 100;
+/**
+ * The day's return on the *position*, not on the instrument.
+ *
+ * These differ in sign whenever the position is short: a contract that rises
+ * 64% is a 64% loss to whoever sold it. Reporting the instrument's move would
+ * put a red dollar figure next to a green percentage on the same row, so this
+ * is measured against the position's own opening value and always agrees in
+ * sign with dayChange.
+ */
+function positionReturn(mark: Mark, quantity: number, multiplier: number): number {
+  const openingValue = mark.previousClose * multiplier * quantity;
+  if (openingValue === 0) return 0;
+  const change = (mark.price - mark.previousClose) * multiplier * quantity;
+  return (change / Math.abs(openingValue)) * 100;
 }
 
 /** "GOOG 360P" — expiry is carried separately by the contract's option detail. */

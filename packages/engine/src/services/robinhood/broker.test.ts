@@ -280,6 +280,13 @@ describe('normalizeEquityPosition', () => {
     );
     expect(short?.quantity).toBe(-5);
     expect(short?.marketValue).toBe(-500);
+    // Price rose 80→100, so a short is down 25% on the position.
+    expect(short?.dayChangePercent).toBeCloseTo(-25, 6);
+  });
+
+  it('reports a long position gain as positive', () => {
+    const long = normalizeEquityPosition({ symbol: 'MU', quantity: '5', type: 'long' }, quotes);
+    expect(long?.dayChangePercent).toBeCloseTo(25, 6);
   });
 
   it('drops a row with no symbol or quantity', () => {
@@ -317,6 +324,16 @@ describe('normalizeOptionPosition', () => {
     expect(position?.quantity).toBe(-3);
     expect(position?.marketValue).toBeCloseTo(14.05 * 100 * -3, 6);
     expect(position?.dayChange).toBeCloseTo((14.05 - 8.58) * 100 * -3, 6);
+  });
+
+  it('reports the return on the position, so the sign matches dayChange', () => {
+    // The contract rose 64%, which is a 64% loss to whoever sold it. Reporting
+    // the instrument's move would put a red dollar figure next to a green
+    // percentage on the same row.
+    const position = normalizeOptionPosition(raw, quotes, instruments);
+    expect(position?.dayChange).toBeLessThan(0);
+    expect(position?.dayChangePercent).toBeLessThan(0);
+    expect(position?.dayChangePercent).toBeCloseTo(-63.75291, 4);
   });
 
   it('converts whole-contract cost to a per-share premium', () => {
