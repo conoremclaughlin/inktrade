@@ -7,3 +7,12 @@ export {
   type SchwabTokenStore,
 } from './schwab.js';
 export { OptionsService } from './options.js';
+export { callToolJson } from './mcp/tools.js';
+export { McpOAuthProvider, type McpOAuthProviderOptions } from './mcp/provider.js';
+export {
+  createFileCredentialStore,
+  createMemoryCredentialStore,
+  type McpCredentialRecord,
+  type McpCredentialStore,
+} from './mcp/credentials.js';
+export * from './robinhood/index.js';

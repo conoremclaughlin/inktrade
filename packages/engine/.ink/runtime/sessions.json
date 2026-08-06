@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "sessions": [
+    {
+      "pcpSessionId": "d7af9617-6b31-4459-84e7-7dd6307d01ec",
+      "backend": "claude",
+      "agentId": "wren",
+      "runtimeLinkId": "4d827ee0-7c98-47df-87e5-604cab69033c",
+      "updatedAt": "2026-06-24T04:25:16.819Z"
+    }
+  ],
+  "current": {
+    "pcpSessionId": "d7af9617-6b31-4459-84e7-7dd6307d01ec",
+    "backend": "claude",
+    "agentId": "wren",
+    "updatedAt": "2026-06-24T04:25:16.820Z"
+  }
+}

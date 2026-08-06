@@ -44,6 +44,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@inktrade/client": "workspace:^",
+    "@modelcontextprotocol/client": "^2.0.0",
     "yahoo-finance2": "^3.14.0"
   },
   "devDependencies": {
