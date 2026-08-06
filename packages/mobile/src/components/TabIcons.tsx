@@ -84,3 +84,17 @@ export function TradeIcon({ color, size = 24 }: IconProps) {
     </Svg>
   );
 }
+
+/**
+ * A ladder — rungs at even intervals, which is exactly what a strike ladder is.
+ */
+export function ChainIcon({ color, size = 24 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M7 3v18M17 3v18" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      {[7, 12, 17].map((y) => (
+        <Path key={y} d={`M7 ${y}h10`} stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      ))}
+    </Svg>
+  );
+}

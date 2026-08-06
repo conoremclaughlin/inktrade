@@ -9,7 +9,8 @@ import { PortfolioScreen } from './src/screens/PortfolioScreen';
 import { ListsScreen } from './src/screens/ListsScreen';
 import { StockScreen } from './src/screens/StockScreen';
 import { TradeScreen } from './src/screens/TradeScreen';
-import { ListsIcon, PortfolioIcon, TradeIcon } from './src/components/TabIcons';
+import { ChainScreen } from './src/screens/ChainScreen';
+import { ChainIcon, ListsIcon, PortfolioIcon, TradeIcon } from './src/components/TabIcons';
 import { colors } from './src/ui/theme';
 
 const queryClient = new QueryClient({
@@ -68,6 +69,13 @@ function Tabs() {
         component={ListsScreen}
         options={{
           tabBarIcon: ({ color, size }) => <ListsIcon color={color} size={size} />,
+        }}
+      />
+      <Tab.Screen
+        name="Chain"
+        component={ChainScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => <ChainIcon color={color} size={size} />,
         }}
       />
       <Tab.Screen

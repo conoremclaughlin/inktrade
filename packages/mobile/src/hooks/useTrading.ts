@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   brokerQuotesQuery,
   costBasisQuery,
+  optionChainQuery,
   tradingModeQuery,
   type CostBasisStrategy,
   type OrderRequest,
@@ -18,6 +19,11 @@ import { api } from '../lib/api';
 
 export function useBrokerQuotes(symbols: string[]) {
   return useQuery(brokerQuotesQuery(api, symbols));
+}
+
+/** The option ladder for one underlying, at one expiration. */
+export function useOptionChain(symbol: string | null, expiration?: string) {
+  return useQuery(optionChainQuery(api, symbol, expiration));
 }
 
 export function useTradingMode() {
