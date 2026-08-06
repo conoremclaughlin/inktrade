@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   MAX_SELECTED_LOTS,
   lotSelectionBlocker,
+  planSale,
+  resolveCostBasisStrategy,
   selectLots,
   selectableQuantity,
   unrealizedGain,
@@ -209,5 +211,156 @@ describe('lotSelectionBlocker', () => {
 
   it('allows a fractional market sell, which the broker does accept', () => {
     expect(lotSelectionBlocker({ ...sell, type: 'MARKET', quantity: 1.5 })).toBeUndefined();
+  });
+});
+
+describe('resolveCostBasisStrategy', () => {
+  it('defaults to highest cost, not the broker default', () => {
+    // The whole point: people who never open settings are the ones FIFO hurts.
+    const decision = resolveCostBasisStrategy();
+    expect(decision.strategy).toBe('HIGHEST_COST');
+    expect(decision.source).toBe('default');
+  });
+
+  it('honours a chosen strategy', () => {
+    expect(resolveCostBasisStrategy({ setting: 'LIFO' })).toEqual({
+      strategy: 'LIFO',
+      source: 'setting',
+    });
+  });
+
+  it('lets FIFO be chosen deliberately', () => {
+    // Choosing it is fine. Arriving at it by accident is what isn't.
+    expect(resolveCostBasisStrategy({ setting: 'FIFO' }).strategy).toBe('FIFO');
+  });
+
+  it('lets the environment override, case-insensitively', () => {
+    expect(resolveCostBasisStrategy({ env: 'lowest_cost' })).toEqual({
+      strategy: 'LOWEST_COST',
+      source: 'env',
+    });
+    expect(resolveCostBasisStrategy({ env: 'LIFO', setting: 'FIFO' }).strategy).toBe('LIFO');
+  });
+
+  it('ignores nonsense rather than failing a sale over it', () => {
+    expect(resolveCostBasisStrategy({ env: 'CHEAPEST' }).strategy).toBe('HIGHEST_COST');
+    expect(resolveCostBasisStrategy({ setting: 'whatever' as never }).strategy).toBe(
+      'HIGHEST_COST',
+    );
+  });
+});
+
+describe('planSale', () => {
+  const sellOrder = { side: 'SELL' as const, type: 'LIMIT' as const, quantity: 100 };
+
+  it('attaches the strategy lots to an order that can carry them', () => {
+    const plan = planSale({
+      lots: SOXL_LOTS,
+      quantity: 100,
+      salePrice: PRICE,
+      strategy: 'HIGHEST_COST',
+      order: sellOrder,
+    });
+
+    // The $176.68 assignment lot is the highest cost, and covers all 100.
+    expect(plan.taxLots).toEqual([{ lotId: 'assigned', quantity: 100 }]);
+    expect(plan.fallback).toBeUndefined();
+    expect(plan.selection?.realizedGain).toBeCloseTo((PRICE - 176.68) * 100, 6);
+  });
+
+  it('prices what FIFO would have cost instead', () => {
+    const highest = planSale({
+      lots: SOXL_LOTS,
+      quantity: 100,
+      salePrice: PRICE,
+      strategy: 'HIGHEST_COST',
+      order: sellOrder,
+    });
+    const fifo = planSale({
+      lots: SOXL_LOTS,
+      quantity: 100,
+      salePrice: PRICE,
+      strategy: 'FIFO',
+      order: sellOrder,
+    });
+
+    // The number this whole module exists to put in front of someone. FIFO
+    // reaches for the March lot at $49.31 and books an $8,229 gain; highest-cost
+    // closes the $176.68 assignment lot for a $4,508 loss. Same 100 shares.
+    expect(fifo.selection!.realizedGain).toBeCloseTo(8_229, 2);
+    expect(highest.selection!.realizedGain).toBeCloseTo(-4_508, 2);
+    const swing = fifo.selection!.realizedGain! - highest.selection!.realizedGain!;
+    expect(swing).toBeCloseTo(12_737, 2);
+  });
+
+  it('refuses to specify lots on a stop order, and says what that costs', () => {
+    // Robinhood rejects tax_lots on stop orders, so the sale becomes FIFO.
+    // Silently becoming FIFO is the exact failure this reports.
+    const plan = planSale({
+      lots: SOXL_LOTS,
+      quantity: 100,
+      salePrice: PRICE,
+      strategy: 'HIGHEST_COST',
+      order: { ...sellOrder, type: 'STOP' },
+    });
+
+    expect(plan.taxLots).toEqual([]);
+    expect(plan.fallback?.reason).toMatch(/stop orders/i);
+    expect(plan.fallback?.additionalGain).toBeCloseTo(12_737, 2);
+  });
+
+  it('reports a shortfall rather than sending a partial selection', () => {
+    // 460 selectable shares exist but only 466 total; asking for 500 can't be
+    // covered. A partial tax_lots array is rejected at submit, and sending none
+    // would quietly fall to FIFO.
+    const plan = planSale({
+      lots: SOXL_LOTS,
+      quantity: 500,
+      salePrice: PRICE,
+      strategy: 'HIGHEST_COST',
+      order: { ...sellOrder, quantity: 500 },
+    });
+
+    expect(plan.taxLots).toEqual([]);
+    expect(plan.fallback?.reason).toMatch(/of 500 shares/);
+  });
+
+  it('calls out shares that are still settling', () => {
+    const plan = planSale({
+      lots: [
+        lot({ id: 'settled', quantity: 10, costPerShare: 50 }),
+        lot({ id: 'settling', quantity: 40, selectable: false }),
+      ],
+      quantity: 50,
+      salePrice: PRICE,
+      strategy: 'HIGHEST_COST',
+      order: { ...sellOrder, quantity: 50 },
+    });
+
+    expect(plan.fallback?.reason).toMatch(/still settling/i);
+  });
+
+  it('leaves additionalGain null rather than guessing past a pending basis', () => {
+    const plan = planSale({
+      lots: [lot({ id: 'pending', quantity: 100, costPerShare: null })],
+      quantity: 100,
+      salePrice: PRICE,
+      strategy: 'HIGHEST_COST',
+      order: { ...sellOrder, type: 'STOP' },
+    });
+
+    // A zero here would read as "FIFO costs you nothing", which is unknown.
+    expect(plan.fallback?.additionalGain).toBeNull();
+  });
+
+  it('reports no extra gain when FIFO is what was chosen', () => {
+    const plan = planSale({
+      lots: SOXL_LOTS,
+      quantity: 100,
+      salePrice: PRICE,
+      strategy: 'FIFO',
+      order: { ...sellOrder, type: 'STOP' },
+    });
+    expect(plan.fallback?.additionalGain).toBe(0);
   });
 });

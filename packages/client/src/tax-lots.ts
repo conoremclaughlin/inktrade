@@ -107,7 +107,13 @@ export function selectLots(
   lots: TaxLot[],
   quantity: number,
   strategy: CostBasisStrategy,
-  salePrice: number,
+  /**
+   * Null when the sale price isn't known yet — a market order before a quote
+   * arrives. Which lots to sell doesn't depend on the price, so the selection
+   * is still correct; only the realized figures become unknowable, and those
+   * report null rather than a number derived from a placeholder.
+   */
+  salePrice: number | null,
 ): LotSelection {
   const selectable = lots.filter((lot) => lot.selectable && lot.quantity > 0);
   const unselectableQuantity = lots
@@ -132,7 +138,9 @@ export function selectLots(
       term: lot.term,
       origin: lot.origin,
       realizedGain:
-        lot.costPerShare === null ? null : (salePrice - lot.costPerShare) * take,
+        lot.costPerShare === null || salePrice === null
+          ? null
+          : (salePrice - lot.costPerShare) * take,
     });
   }
 
@@ -248,4 +256,132 @@ export function lotSelectionBlocker(order: {
 
 function round(value: number): number {
   return Math.round(value * 1e6) / 1e6;
+}
+
+/**
+ * The strategy used when nobody chose one.
+ *
+ * Highest cost first: it realizes the smallest gain — or the largest loss — on
+ * every sale, which is the outcome a person would pick if they were asked each
+ * time. They are not asked each time, which is precisely why the default has to
+ * be the good one rather than the broker's.
+ *
+ * This is not universally optimal and isn't claimed to be. Someone deliberately
+ * realizing gains against a carryforward wants LOWEST_COST, and that's a
+ * setting. But a default is what happens to people who never open settings,
+ * and for them FIFO is close to the worst available answer.
+ */
+export const DEFAULT_COST_BASIS_STRATEGY: CostBasisStrategy = 'HIGHEST_COST';
+
+export type CostBasisSource = 'env' | 'setting' | 'default';
+
+export interface CostBasisDecision {
+  strategy: CostBasisStrategy;
+  source: CostBasisSource;
+}
+
+function isStrategy(value: unknown): value is CostBasisStrategy {
+  return typeof value === 'string' && COST_BASIS_STRATEGIES.includes(value as CostBasisStrategy);
+}
+
+/**
+ * Which strategy applies, and who decided.
+ *
+ * Pure, so the server enforcing it and the UI explaining it can never disagree.
+ */
+export function resolveCostBasisStrategy(
+  input: { env?: string | null; setting?: CostBasisStrategy | null } = {},
+): CostBasisDecision {
+  const env = input.env?.trim().toUpperCase();
+  if (isStrategy(env)) return { strategy: env, source: 'env' };
+  if (isStrategy(input.setting)) return { strategy: input.setting, source: 'setting' };
+  return { strategy: DEFAULT_COST_BASIS_STRATEGY, source: 'default' };
+}
+
+export interface SalePlan {
+  strategy: CostBasisStrategy;
+  /** Lots to attach to the order. Empty when specified-lot selling isn't possible. */
+  taxLots: { lotId: string; quantity: number }[];
+  /** The full selection, for display. Null when lots couldn't be specified. */
+  selection: LotSelection | null;
+  /**
+   * Set whenever the sale will use the broker's default instead of the chosen
+   * strategy — which means FIFO, which is what this module exists to avoid.
+   */
+  fallback?: {
+    /** Why lots couldn't be specified, in words a user can act on. */
+    reason: string;
+    /** What FIFO would realize instead. Null when a basis is pending. */
+    realizedGain: number | null;
+    /**
+     * How much MORE gain FIFO realizes than the chosen strategy would have.
+     * Positive is money lost to the fallback. Null when either side is unknown.
+     */
+    additionalGain: number | null;
+  };
+}
+
+/**
+ * Plan a sale: which lots, what it realizes, and what it costs if we can't.
+ *
+ * The second half is the point. Robinhood refuses `tax_lots` on stop orders,
+ * dollar-amount orders, overnight-session orders and fractional limit orders —
+ * and when it refuses, the sale silently becomes FIFO. Silently is the problem:
+ * the user made a choice, the choice was dropped, and the consequence shows up
+ * months later on a 1099.
+ *
+ * So a plan that can't specify lots still reports what the fallback will
+ * realize and how much more gain that is than the strategy would have. A number
+ * in front of someone before they confirm is the whole difference between an
+ * informed trade and a nasty surprise.
+ */
+export function planSale(input: {
+  lots: TaxLot[];
+  quantity: number;
+  /** Null when unknown — see {@link selectLots}. */
+  salePrice: number | null;
+  strategy: CostBasisStrategy;
+  order: Parameters<typeof lotSelectionBlocker>[0];
+}): SalePlan {
+  const { lots, quantity, salePrice, strategy, order } = input;
+
+  const priceable = Number.isFinite(quantity) && quantity > 0;
+
+  const fallbackDetail = (reason: string) => {
+    // With no share count there is nothing to compare, and a zero here would
+    // read as "the fallback costs you nothing" — which is unknown, not free.
+    if (!priceable) return { reason, realizedGain: null, additionalGain: null };
+
+    const fifo = selectLots(lots, quantity, 'FIFO', salePrice);
+    const chosen = selectLots(lots, quantity, strategy, salePrice);
+    const additionalGain =
+      fifo.realizedGain === null || chosen.realizedGain === null
+        ? null
+        : round(fifo.realizedGain - chosen.realizedGain);
+    return { reason, realizedGain: fifo.realizedGain, additionalGain };
+  };
+
+  const blocker = lotSelectionBlocker(order);
+  if (blocker) {
+    return { strategy, taxLots: [], selection: null, fallback: fallbackDetail(blocker) };
+  }
+
+  const selection = selectLots(lots, quantity, strategy, salePrice);
+
+  // Not enough selectable stock to cover the order. Sending a partial selection
+  // would be rejected at submit; sending none would quietly become FIFO.
+  if (selection.shortfall > 0) {
+    const detail =
+      selection.unselectableQuantity > 0
+        ? `Only ${round(quantity - selection.shortfall)} of ${quantity} shares can be assigned to lots — ` +
+          `${selection.unselectableQuantity} are still settling and can't be specified yet.`
+        : `Only ${round(quantity - selection.shortfall)} of ${quantity} shares are available in open lots.`;
+    return { strategy, taxLots: [], selection, fallback: fallbackDetail(detail) };
+  }
+
+  return {
+    strategy,
+    taxLots: selection.lots.map((lot) => ({ lotId: lot.lotId, quantity: lot.quantity })),
+    selection,
+  };
 }

@@ -154,6 +154,11 @@ export function TradingChart({ data, symbol, height = 500 }: TradingChartProps) 
         textColor: 'rgba(139, 148, 168, 0.8)',
         fontFamily: 'var(--font-mono), ui-monospace, monospace',
         fontSize: 11,
+        // Off for the same reason mobile turns it off: it sits over the price
+        // data and implies TradingView is the source, which they aren't — this
+        // is their rendering library drawing our brokerage's data. Credit for
+        // lightweight-charts belongs in NOTICE, not on top of a candle.
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: 'rgba(42, 46, 57, 0.4)', style: LineStyle.Dotted },
