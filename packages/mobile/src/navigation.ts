@@ -6,6 +6,7 @@ export type TabParamList = {
 };
 
 export type RootStackParamList = {
+  Settings: undefined;
   Tabs: undefined;
   Stock: { symbol: string };
   Trade: { symbol?: string } | undefined;

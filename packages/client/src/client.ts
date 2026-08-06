@@ -17,7 +17,7 @@ import type {
   PortfolioSummary,
 } from './broker/types.js';
 import type { CostBasisDecision, CostBasisStrategy, SalePlan, TaxLot } from './tax-lots.js';
-import type { TradingModeDecision } from './trading-mode.js';
+import type { TradingMode, TradingModeDecision } from './trading-mode.js';
 
 /** What /api/portfolio returns — the summary plus which brokerage produced it. */
 export interface PortfolioResponse {
@@ -87,6 +87,7 @@ export interface ApiClient {
   placeOrder(order: OrderRequest): Promise<OrderOutcome>;
 
   getTradingMode(): Promise<TradingModeDecision>;
+  setTradingMode(mode: TradingMode): Promise<TradingModeDecision>;
   getCostBasis(): Promise<CostBasisDecision>;
   setCostBasis(strategy: CostBasisStrategy): Promise<CostBasisDecision>;
 }
@@ -215,6 +216,13 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
     getTradingMode() {
       return request<TradingModeDecision>('/api/broker/trading-mode');
+    },
+
+    setTradingMode(mode) {
+      return request<TradingModeDecision>('/api/broker/trading-mode', {
+        method: 'PUT',
+        body: JSON.stringify({ mode }),
+      });
     },
 
     getCostBasis() {

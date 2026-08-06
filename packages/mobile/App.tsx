@@ -1,5 +1,9 @@
-import { DarkTheme, NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Pressable } from 'react-native';
+import { DarkTheme, NavigationContainer, useNavigation } from '@react-navigation/native';
+import {
+  createNativeStackNavigator,
+  type NativeStackNavigationProp,
+} from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
@@ -10,7 +14,14 @@ import { ListsScreen } from './src/screens/ListsScreen';
 import { StockScreen } from './src/screens/StockScreen';
 import { TradeScreen } from './src/screens/TradeScreen';
 import { ChainScreen } from './src/screens/ChainScreen';
-import { ChainIcon, ListsIcon, PortfolioIcon, TradeIcon } from './src/components/TabIcons';
+import { SettingsScreen } from './src/screens/SettingsScreen';
+import {
+  ChainIcon,
+  ListsIcon,
+  PortfolioIcon,
+  SettingsIcon,
+  TradeIcon,
+} from './src/components/TabIcons';
 import { colors } from './src/ui/theme';
 
 const queryClient = new QueryClient({
@@ -41,9 +52,24 @@ const navTheme = {
 };
 
 function Tabs() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
   return (
     <Tab.Navigator
       screenOptions={{
+        // On every tab rather than one: settings that decide whether orders can
+        // be placed at all shouldn't be reachable from only one screen.
+        headerRight: () => (
+          <Pressable
+            onPress={() => navigation.navigate('Settings')}
+            hitSlop={12}
+            style={{ paddingHorizontal: 4 }}
+            accessibilityLabel="Settings"
+            accessibilityRole="button"
+          >
+            <SettingsIcon color={colors.textSecondary} />
+          </Pressable>
+        ),
         headerStyle: { backgroundColor: colors.void },
         headerShadowVisible: false,
         headerTintColor: colors.textPrimary,
@@ -110,6 +136,7 @@ export default function App() {
               component={StockScreen}
               options={({ route }) => ({ title: route.params.symbol })}
             />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </QueryClientProvider>

@@ -6,6 +6,7 @@ import {
   tradingModeQuery,
   type CostBasisStrategy,
   type OrderRequest,
+  type TradingMode,
 } from '@inktrade/client';
 import { api } from '../lib/api';
 
@@ -32,6 +33,21 @@ export function useTradingMode() {
 
 export function useCostBasis() {
   return useQuery(costBasisQuery(api));
+}
+
+/**
+ * Turn order placement on or off.
+ *
+ * Refused server-side while a deployment-level override is active, so the
+ * mutation can fail even when the switch looks available — the response is the
+ * source of truth, not the toggle.
+ */
+export function useSetTradingMode() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (mode: TradingMode) => api.setTradingMode(mode),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['broker', 'trading-mode'] }),
+  });
 }
 
 export function useSetCostBasis() {
