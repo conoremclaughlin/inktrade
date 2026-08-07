@@ -16,6 +16,7 @@ import type {
   OrderReview,
   PortfolioSummary,
 } from './broker/types.js';
+import type { ChainGridQuery, ChainGridResponse } from './analytics.js';
 import type { CostBasisDecision, CostBasisStrategy, SalePlan, TaxLot } from './tax-lots.js';
 import type { OversoldCandidate } from './indicators.js';
 import type { TradingMode, TradingModeDecision } from './trading-mode.js';
@@ -74,6 +75,7 @@ export interface ApiClient {
   getOrderActivity(params?: { symbol?: string; limit?: number }): Promise<OrderActivityResponse>;
   getTickerHistory(symbol: string, period: HistoryPeriod): Promise<TickerHistoryResponse>;
   getOIDistribution(symbol: string, expiry?: string): Promise<OIDistributionResponse>;
+  getChainGrid(symbol: string, query?: ChainGridQuery): Promise<ChainGridResponse>;
   getWatchlist(): Promise<WatchlistResponse>;
   putWatchlist(symbols: string[]): Promise<WatchlistResponse>;
 
@@ -217,6 +219,14 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       const params = new URLSearchParams({ symbol });
       if (expiry) params.set('expiry', expiry);
       return request<OIDistributionResponse>(`/api/oi-distribution?${params}`);
+    },
+
+    getChainGrid(symbol, query) {
+      const params = new URLSearchParams({ symbol });
+      if (query?.type) params.set('type', query.type);
+      if (query?.offset != null) params.set('offset', String(query.offset));
+      if (query?.limit != null) params.set('limit', String(query.limit));
+      return request<ChainGridResponse>(`/api/chain-grid?${params}`);
     },
 
     getWatchlist() {

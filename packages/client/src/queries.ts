@@ -1,6 +1,7 @@
 import type { ApiClient } from './client.js';
 import type { HistoryPeriod } from './types.js';
 import type { OptionChain } from './broker/types.js';
+import type { ChainGridQuery } from './analytics.js';
 
 /** Upstream quote batch limit — chunk sizing must match it. */
 export const OPTION_QUOTE_BATCH = 20;
@@ -18,6 +19,8 @@ export const queryKeys = {
   oiDistribution: (symbol: string, expiry?: string) =>
     ['oi-distribution', symbol, expiry ?? 'nearest'] as const,
   watchlist: () => ['watchlist'] as const,
+  chainGrid: (symbol: string, query?: ChainGridQuery) =>
+    ['chain-grid', symbol, query?.type ?? 'call', query?.offset ?? 0, query?.limit ?? 6] as const,
 };
 
 /** Quotes move constantly; refetch on an interval but keep them briefly fresh. */
@@ -55,6 +58,30 @@ export function oiDistributionQuery(api: ApiClient, symbol: string | null, expir
     queryFn: () => api.getOIDistribution(symbol!, expiry),
     enabled: !!symbol,
     staleTime: HISTORY_STALE_MS,
+  };
+}
+
+/**
+ * A grid load is many chained upstream requests — one chain call per
+ * expiration in the window — so it is expensive in a way quotes are not.
+ * Hold it far longer than a quote, and never on an interval: the strikes and
+ * the model don't move fast enough to justify re-paying that.
+ */
+export const CHAIN_GRID_STALE_MS = 5 * 60_000;
+
+export function chainGridQuery(
+  api: ApiClient,
+  symbol: string | null,
+  query?: ChainGridQuery,
+) {
+  return {
+    queryKey: queryKeys.chainGrid(symbol ?? '', query),
+    queryFn: () => api.getChainGrid(symbol!, query),
+    enabled: !!symbol,
+    staleTime: CHAIN_GRID_STALE_MS,
+    // Keep the previous window on screen while the next one loads. Paging
+    // expirations otherwise blanks the grid on every step.
+    placeholderData: <T,>(prev: T) => prev,
   };
 }
 

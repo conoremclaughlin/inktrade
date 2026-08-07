@@ -30,8 +30,17 @@ export {
   computeGreeks,
   computeLeverageSurface,
   analyzeLeverage,
+  estimateLeverage,
+  probabilityOfProfit,
+  impliedVolatility,
+  isPlausibleIV,
+  leverageBand,
+  probabilityBand,
+  GRID_RISK_FREE_RATE,
   type LeverageSurfaceParams,
   type LeverageAnalysisParams,
+  type LeverageBand,
+  type ProbabilityBand,
 } from './leverage.js';
 
 // LETF
@@ -70,3 +79,5 @@ export {
   getDefaultMarketDataService,
   resetMarketDataService,
 } from './factory.js';
+
+export { reviveContract } from './wire.js';

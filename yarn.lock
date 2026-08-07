@@ -1747,10 +1747,13 @@ __metadata:
   dependencies:
     "@tanstack/react-query": "npm:^5.62.0"
     "@types/node": "npm:^20.10.6"
+    "@types/react": "npm:^19.0.0"
+    react: "npm:^19.0.0"
     typescript: "npm:^5.8.0"
     vitest: "npm:^4.1.6"
   peerDependencies:
     "@tanstack/react-query": ^5.62.0
+    react: ">=18"
   languageName: unknown
   linkType: soft
 
@@ -2871,7 +2874,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/react@npm:~19.2.2":
+"@types/react@npm:^19.0.0, @types/react@npm:~19.2.2":
   version: 19.2.18
   resolution: "@types/react@npm:19.2.18"
   dependencies:
@@ -6393,6 +6396,13 @@ __metadata:
   version: 19.2.3
   resolution: "react@npm:19.2.3"
   checksum: 10/d16b7f35c0d35a56f63d9d1693819762e4abc479c57dd6310298920bed3820fcec7e17a99d44983416d8f5049143ea45b8005d3ab8324bae8973224400502b08
+  languageName: node
+  linkType: hard
+
+"react@npm:^19.0.0":
+  version: 19.2.8
+  resolution: "react@npm:19.2.8"
+  checksum: 10/a3c697798035e295ca9e51591d3a8700824535cb8c070fac1f8abbe69717ceb99108cbc4ba7b31a606806f336b1eba705705f63b9d39ace198fe51e8990ac843
   languageName: node
   linkType: hard
 
