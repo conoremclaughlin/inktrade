@@ -17,87 +17,51 @@ import {
   LineStyle,
   type MouseEventParams,
 } from 'lightweight-charts';
+import {
+  computeBollinger,
+  computeEMA,
+  computeSMA,
+  INDICATOR_COLORS,
+  INDICATOR_LABELS,
+  type IndicatorId,
+} from '@inktrade/client';
 import type { TickerHistoryPoint, TickerHistoryResponse } from '@/lib/hooks';
 
 type ChartMode = 'candlestick' | 'line';
-type Indicator = 'sma20' | 'sma50' | 'sma200' | 'ema12' | 'ema26' | 'bollinger';
 
-const INDICATOR_COLORS: Record<Indicator, string> = {
-  sma20: '#f59e0b',
-  sma50: '#8b5cf6',
-  sma200: '#ec4899',
-  ema12: '#06b6d4',
-  ema26: '#f97316',
-  bollinger: '#6366f1',
-};
+/**
+ * Indicators offered on the chart.
+ *
+ * The maths, colours and labels all come from @inktrade/client. This file used
+ * to carry its own copies of computeSMA/EMA/Bollinger alongside its own colour
+ * and label maps — they happened to agree with the shared ones to the last
+ * decimal on 254 bars of AAPL, which is exactly why the duplication was
+ * dangerous rather than obviously broken: nothing would have flagged the day
+ * they stopped agreeing, and the two platforms would quietly draw different
+ * lines from the same data.
+ */
+const CHART_INDICATORS: IndicatorId[] = [
+  'sma20',
+  'sma50',
+  'sma200',
+  'ema12',
+  'ema26',
+  'ema50',
+  'bollinger',
+];
 
-const INDICATOR_LABELS: Record<Indicator, string> = {
-  sma20: 'SMA 20',
-  sma50: 'SMA 50',
-  sma200: 'SMA 200',
-  ema12: 'EMA 12',
-  ema26: 'EMA 26',
-  bollinger: 'Bollinger',
-};
-
-function computeSMA(points: TickerHistoryPoint[], period: number): (number | null)[] {
-  const result: (number | null)[] = [];
-  for (let i = 0; i < points.length; i++) {
-    if (i < period - 1) {
-      result.push(null);
-      continue;
-    }
-    let sum = 0;
-    for (let j = i - period + 1; j <= i; j++) sum += points[j].close;
-    result.push(sum / period);
-  }
-  return result;
-}
-
-function computeEMA(points: TickerHistoryPoint[], period: number): (number | null)[] {
-  const result: (number | null)[] = [];
-  const k = 2 / (period + 1);
-  let ema: number | null = null;
-  for (let i = 0; i < points.length; i++) {
-    if (i < period - 1) {
-      result.push(null);
-      continue;
-    }
-    if (ema === null) {
-      let sum = 0;
-      for (let j = i - period + 1; j <= i; j++) sum += points[j].close;
-      ema = sum / period;
-    } else {
-      ema = points[i].close * k + ema * (1 - k);
-    }
-    result.push(ema);
-  }
-  return result;
-}
-
-function computeBollinger(points: TickerHistoryPoint[], period: number = 20, mult: number = 2) {
-  const sma = computeSMA(points, period);
-  const upper: (number | null)[] = [];
-  const lower: (number | null)[] = [];
-
-  for (let i = 0; i < points.length; i++) {
-    if (sma[i] === null) {
-      upper.push(null);
-      lower.push(null);
-      continue;
-    }
-    let sumSq = 0;
-    for (let j = i - period + 1; j <= i; j++) {
-      const diff = points[j].close - sma[i]!;
-      sumSq += diff * diff;
-    }
-    const std = Math.sqrt(sumSq / period);
-    upper.push(sma[i]! + mult * std);
-    lower.push(sma[i]! - mult * std);
-  }
-
-  return { middle: sma, upper, lower };
-}
+/*
+ * VWAP is deliberately absent.
+ *
+ * It is session-anchored by definition, and these are DAILY bars — so every
+ * bar is its own session and the reset makes it degenerate. Measured on 254
+ * bars of AAPL, the result equals (high + low + close) / 3 to within 6e-14:
+ * not VWAP at all, just smoothed price wearing its name.
+ *
+ * A trader reading "VWAP" expects the volume-weighted average of the session
+ * and will size a trade against it. Drawing typical price under that label is
+ * worse than offering nothing. It comes back when intraday bars do.
+ */
 
 interface TradingChartProps {
   data: TickerHistoryResponse;
@@ -114,7 +78,7 @@ export function TradingChart({ data, symbol, height = 500 }: TradingChartProps) 
   const indicatorSeriesRefs = useRef<Map<string, any>>(new Map());
 
   const [mode, setMode] = useState<ChartMode>('candlestick');
-  const [activeIndicators, setActiveIndicators] = useState<Set<Indicator>>(new Set(['sma20', 'sma50']));
+  const [activeIndicators, setActiveIndicators] = useState<Set<IndicatorId>>(new Set(['sma20', 'sma50']));
   const [crosshairData, setCrosshairData] = useState<{
     time: string;
     open: number;
@@ -297,9 +261,11 @@ export function TradingChart({ data, symbol, height = 500 }: TradingChartProps) 
   function addIndicators(
     chart: IChartApi,
     points: TickerHistoryPoint[],
-    indicators: Set<Indicator>,
+    indicators: Set<IndicatorId>,
   ) {
     indicatorSeriesRefs.current.clear();
+
+    const closes = points.map((p) => p.close);
 
     indicators.forEach((ind) => {
       let values: (number | null)[] = [];
@@ -307,22 +273,25 @@ export function TradingChart({ data, symbol, height = 500 }: TradingChartProps) 
 
       switch (ind) {
         case 'sma20':
-          values = computeSMA(points, 20);
+          values = computeSMA(closes, 20);
           break;
         case 'sma50':
-          values = computeSMA(points, 50);
+          values = computeSMA(closes, 50);
           break;
         case 'sma200':
-          values = computeSMA(points, 200);
+          values = computeSMA(closes, 200);
           break;
         case 'ema12':
-          values = computeEMA(points, 12);
+          values = computeEMA(closes, 12);
           break;
         case 'ema26':
-          values = computeEMA(points, 26);
+          values = computeEMA(closes, 26);
+          break;
+        case 'ema50':
+          values = computeEMA(closes, 50);
           break;
         case 'bollinger': {
-          const bb = computeBollinger(points);
+          const bb = computeBollinger(closes);
           values = bb.middle;
           extraSeries = [
             { key: 'bollinger_upper', values: bb.upper, color: INDICATOR_COLORS.bollinger, dashed: true },
@@ -401,7 +370,7 @@ export function TradingChart({ data, symbol, height = 500 }: TradingChartProps) 
     };
   }, []);
 
-  const toggleIndicator = (ind: Indicator) => {
+  const toggleIndicator = (ind: IndicatorId) => {
     setActiveIndicators((prev) => {
       const next = new Set(prev);
       if (next.has(ind)) next.delete(ind);
@@ -464,7 +433,7 @@ export function TradingChart({ data, symbol, height = 500 }: TradingChartProps) 
         {/* Indicators */}
         <div className="flex items-center gap-1 flex-wrap">
           <span className="text-[10px] text-text-muted mr-1">Indicators:</span>
-          {(Object.keys(INDICATOR_LABELS) as Indicator[]).map((ind) => (
+          {CHART_INDICATORS.map((ind) => (
             <button
               key={ind}
               onClick={() => toggleIndicator(ind)}

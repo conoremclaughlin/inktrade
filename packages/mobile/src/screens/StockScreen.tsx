@@ -40,11 +40,23 @@ const INDICATORS: IndicatorId[] = [
   'sma200',
   'ema12',
   'ema26',
-  // The two WSB traders keep naming: the 50 EMA and VWAP.
+  // The 50 EMA the WSB traders kept naming.
   'ema50',
-  'vwap',
   'bollinger',
 ];
+
+/*
+ * VWAP is deliberately absent.
+ *
+ * It is session-anchored by definition, and these are DAILY bars — so every
+ * bar is its own session and the reset makes it degenerate. Measured on 254
+ * bars of AAPL, the result equals (high + low + close) / 3 to within 6e-14:
+ * not VWAP at all, just smoothed price wearing its name.
+ *
+ * A trader reading "VWAP" expects the volume-weighted average of the session
+ * and will size a trade against it. Drawing typical price under that label is
+ * worse than offering nothing. It comes back when intraday bars do.
+ */
 
 /** Oscillators are exclusive — two stacked panes leave no room for price. */
 const OSCILLATORS: OscillatorId[] = ['rsi', 'macd'];
