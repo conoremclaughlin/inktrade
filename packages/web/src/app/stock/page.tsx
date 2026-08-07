@@ -7,6 +7,7 @@ import { TradingChart } from '@/components/stock/trading-chart';
 import { OIDistributionChart } from '@/components/stock/oi-chart';
 import { OrderActivityPanel } from '@/components/stock/order-activity';
 import { LevelsPanel } from '@/components/stock/levels-panel';
+import { OscillatorPanel } from '@/components/stock/oscillator-panel';
 import { ThetaDecayChart } from '@/components/stock/theta-decay-chart';
 import { useQuote, useTickerHistory } from '@/lib/hooks';
 
@@ -259,6 +260,16 @@ function StockContent() {
             Your own orders in this name, above the market-wide charts: what
             you did matters more than what everyone else did.
           */}
+          {/*
+            Directly under price, because an oscillator is read against the
+            bars above it — scrolling between the two would defeat the point.
+          */}
+          {history.data && (
+            <div className="mt-6">
+              <OscillatorPanel points={history.data.points} />
+            </div>
+          )}
+
           {/*
             Levels read as a summary of the chart above, so they sit directly
             under it — before your own orders and well before the market-wide
