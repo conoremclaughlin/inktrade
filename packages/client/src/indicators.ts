@@ -299,3 +299,80 @@ export const OSCILLATOR_LABELS: Record<OscillatorId, string> = {
   rsi: 'RSI 14',
   macd: 'MACD 12/26/9',
 };
+
+/** A reference price a trader reads the current price against. */
+export interface PeriodLevel {
+  id: 'sessionHigh' | 'sessionLow' | 'monthLow' | 'ytdLow' | 'high52' | 'low52';
+  label: string;
+  value: number;
+  /**
+   * How far the current price sits above this level, as a percent.
+   *
+   * The distance is the point, not the level: "3% off the 52-week low" is the
+   * sentence a trader says. Showing only the level leaves them doing the
+   * arithmetic on every row.
+   */
+  distancePercent: number | null;
+}
+
+/**
+ * Session, monthly, year-to-date and 52-week reference levels.
+ *
+ * Computed from the daily history already on screen rather than fetched: the
+ * bars are right there, and a second request for numbers derivable from them
+ * would be a round trip to learn what we already know.
+ *
+ * `today` is passed in rather than read from the clock so this stays pure and
+ * testable — a function whose output changes at midnight is a function that
+ * fails in CI at midnight.
+ */
+export function periodLevels(
+  bars: { date: string; high: number; low: number; close: number }[],
+  price: number,
+  today: string,
+): PeriodLevel[] {
+  if (bars.length === 0) return [];
+
+  const year = today.slice(0, 4);
+  const month = today.slice(0, 7);
+  const session = bars[bars.length - 1];
+
+  // A 52-week window, not "everything we were given" — a 5-year chart would
+  // otherwise report a 5-year low as the 52-week one.
+  const cutoff = shiftYear(today, -1);
+  const lastYear = bars.filter((b) => b.date.slice(0, 10) >= cutoff);
+  const window = lastYear.length > 0 ? lastYear : bars;
+
+  const thisMonth = bars.filter((b) => b.date.slice(0, 7) === month);
+  const thisYear = bars.filter((b) => b.date.slice(0, 4) === year);
+
+  const base: Omit<PeriodLevel, 'distancePercent'>[] = [
+    { id: 'sessionHigh', label: 'Session high', value: session.high },
+    { id: 'sessionLow', label: 'Session low', value: session.low },
+    ...(thisMonth.length > 0
+      ? [{ id: 'monthLow' as const, label: 'Month low', value: min(thisMonth) }]
+      : []),
+    ...(thisYear.length > 0
+      ? [{ id: 'ytdLow' as const, label: 'YTD low', value: min(thisYear) }]
+      : []),
+    { id: 'high52', label: '52-week high', value: Math.max(...window.map((b) => b.high)) },
+    { id: 'low52', label: '52-week low', value: min(window) },
+  ];
+
+  return base.map((level) => ({
+    ...level,
+    distancePercent: distanceFromLevel(price, level.value),
+  }));
+}
+
+function min(bars: { low: number }[]): number {
+  return Math.min(...bars.map((b) => b.low));
+}
+
+/** Shift an ISO date by whole years, clamping Feb 29 to Feb 28. */
+function shiftYear(iso: string, years: number): string {
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  const shifted = String(Number(y) + years).padStart(4, '0');
+  const day = m === '02' && d === '29' ? '28' : d;
+  return `${shifted}-${m}-${day}`;
+}

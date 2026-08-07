@@ -8,6 +8,7 @@ import {
   computeSMA,
   computeVWAP,
   distanceFromLevel,
+  periodLevels,
   warmupBars,
 } from './indicators.js';
 
@@ -255,5 +256,59 @@ describe('warmupBars', () => {
 
   it('never asks for less than the period itself', () => {
     expect(warmupBars(14, 0)).toBe(15);
+  });
+});
+
+describe('periodLevels', () => {
+  const bar = (date: string, low: number, high: number) => ({
+    date,
+    low,
+    high,
+    close: (low + high) / 2,
+  });
+
+  const bars = [
+    bar('2024-09-01', 50, 60), // genuinely outside the 52-week window
+    bar('2026-01-05', 80, 90),
+    bar('2026-06-01', 70, 130),
+    bar('2026-08-05', 95, 105),
+    bar('2026-08-06', 98, 108), // today
+  ];
+
+  it('reads the session from the most recent bar', () => {
+    const levels = periodLevels(bars, 100, '2026-08-06');
+    expect(levels.find((l) => l.id === 'sessionHigh')?.value).toBe(108);
+    expect(levels.find((l) => l.id === 'sessionLow')?.value).toBe(98);
+  });
+
+  it('keeps the 52-week window to 52 weeks', () => {
+    // The 2025-09-01 bar has the lowest low of all, and must NOT be the
+    // 52-week low — otherwise a 5-year chart reports a 5-year low as one.
+    const levels = periodLevels(bars, 100, '2026-08-06');
+    expect(levels.find((l) => l.id === 'low52')?.value).toBe(70);
+    expect(levels.find((l) => l.id === 'high52')?.value).toBe(130);
+  });
+
+  it('scopes month and year lows to the calendar period', () => {
+    const levels = periodLevels(bars, 100, '2026-08-06');
+    expect(levels.find((l) => l.id === 'monthLow')?.value).toBe(95);
+    expect(levels.find((l) => l.id === 'ytdLow')?.value).toBe(70);
+  });
+
+  it('reports distance, because that is the sentence a trader says', () => {
+    const levels = periodLevels(bars, 77, '2026-08-06');
+    // 77 against a 70 low is +10%.
+    expect(levels.find((l) => l.id === 'low52')?.distancePercent).toBeCloseTo(10, 6);
+  });
+
+  it('falls back to the whole series when nothing is inside the window', () => {
+    const old = [bar('2020-01-01', 10, 20)];
+    const levels = periodLevels(old, 15, '2026-08-06');
+    // Better a level from stale bars, labelled, than no level at all.
+    expect(levels.find((l) => l.id === 'low52')?.value).toBe(10);
+  });
+
+  it('returns nothing rather than throwing on an empty series', () => {
+    expect(periodLevels([], 100, '2026-08-06')).toEqual([]);
   });
 });

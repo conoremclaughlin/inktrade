@@ -25,6 +25,8 @@ import { api } from '../lib/api';
 import { CandlestickChart, type ChartMode } from '../components/CandlestickChart';
 import { OIChart } from '../components/OIChart';
 import { OscillatorPane } from '../components/OscillatorPane';
+import { VolumePane } from '../components/VolumePane';
+import { PeriodLevels } from '../components/PeriodLevels';
 import { OrderActivityList } from '../components/OrderActivityList';
 import { useOrderActivity } from '../hooks/useTrading';
 import { changeColor, colors, fonts, formatPercent, formatPrice, radii, spacing } from '../ui/theme';
@@ -143,9 +145,20 @@ export function StockScreen({ route, navigation }: Props) {
         onPress={(id) => setOscillator(oscillator === id ? null : (id as OscillatorId))}
       />
 
+      <VolumePane points={points} />
+
       {oscillator && points.length > 0 && (
         <OscillatorPane points={points} oscillator={oscillator} />
       )}
+
+      {/*
+        The levels a setup is described against — "near the monthly low", "3%
+        off the 52-week high". Below the chart because they read as a summary
+        of it, not as controls on it.
+      */}
+      <Section title="Levels">
+        <PeriodLevels points={points} price={last?.close ?? null} />
+      </Section>
 
       {history.data && (
         <View style={styles.statsRow}>
