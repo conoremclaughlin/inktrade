@@ -3,6 +3,7 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 export type TabParamList = {
   Portfolio: undefined;
   Lists: undefined;
+  Calc: { symbol?: string } | undefined;
   Trade: { symbol?: string } | undefined;
   Chain: { symbol?: string } | undefined;
 };

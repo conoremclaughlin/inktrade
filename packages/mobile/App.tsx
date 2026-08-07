@@ -14,8 +14,10 @@ import { ListsScreen } from './src/screens/ListsScreen';
 import { StockScreen } from './src/screens/StockScreen';
 import { TradeScreen } from './src/screens/TradeScreen';
 import { ChainScreen } from './src/screens/ChainScreen';
+import { CalculatorScreen } from './src/screens/CalculatorScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import {
+  CalculatorIcon,
   ChainIcon,
   ListsIcon,
   PortfolioIcon,
@@ -102,6 +104,14 @@ function Tabs() {
         component={ChainScreen}
         options={{
           tabBarIcon: ({ color, size }) => <ChainIcon color={color} size={size} />,
+        }}
+      />
+      <Tab.Screen
+        name="Calc"
+        component={CalculatorScreen}
+        options={{
+          title: 'Calculator',
+          tabBarIcon: ({ color, size }) => <CalculatorIcon color={color} size={size} />,
         }}
       />
       <Tab.Screen

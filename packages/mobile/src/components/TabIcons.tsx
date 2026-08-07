@@ -99,6 +99,28 @@ export function ChainIcon({ color, size = 24 }: IconProps) {
   );
 }
 
+/** A payoff curve — the shape the calculator is about. */
+export function CalculatorIcon({ color, size = 24 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M3 18h18"
+        stroke={color}
+        strokeWidth={1.4}
+        strokeLinecap="round"
+        opacity={0.45}
+      />
+      <Path
+        d="M3 18h7l11-12"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** A gear, for the header button that reaches Settings. */
 export function SettingsIcon({ color, size = 22 }: IconProps) {
   return (
