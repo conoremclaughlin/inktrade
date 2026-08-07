@@ -3,6 +3,7 @@ export * from './client.js';
 export * from './queries.js';
 export * from './watchlist-store.js';
 export * from './indicators.js';
+export * from './macro.js';
 export * from './lists.js';
 export * from './broker/types.js';
 export * from './broker/mock.js';

@@ -23,6 +23,7 @@ import { usePortfolio, usePortfolioHistory } from '../hooks/usePortfolio';
 import { PortfolioChart } from '../components/PortfolioChart';
 import { PositionRow } from '../components/PositionRow';
 import { AssignmentBanner } from '../components/AssignmentBanner';
+import { MacroStrip } from '../components/MacroStrip';
 import { API_BASE_URL } from '../lib/api';
 import { changeColor, colors, fonts, formatPercent, formatPrice, radii, spacing } from '../ui/theme';
 
@@ -92,6 +93,12 @@ export function PortfolioScreen() {
       // them and scrubbing never starts.
       scrollEnabled={scrubbed === null}
     >
+      {/*
+        The weather, above your own positions: a red portfolio on a red tape is
+        a different morning from a red portfolio on a green one.
+      */}
+      <MacroStrip />
+
       <View style={styles.headerBlock}>
         <Text style={styles.headerLabel}>Portfolio value</Text>
         <Text style={styles.total}>${formatPrice(header.value)}</Text>
