@@ -9,6 +9,7 @@ import {
   computeVWAP,
   distanceFromLevel,
   periodLevels,
+  screenOversold,
   warmupBars,
 } from './indicators.js';
 
@@ -310,5 +311,99 @@ describe('periodLevels', () => {
 
   it('returns nothing rather than throwing on an empty series', () => {
     expect(periodLevels([], 100, '2026-08-06')).toEqual([]);
+  });
+});
+
+describe('screenOversold', () => {
+  /** A series that ends deeply oversold: one long slide. */
+  const falling = (start: number, n = 60) =>
+    Array.from({ length: n }, (_, i) => {
+      const close = start - i;
+      return { date: isoDay(i), high: close + 1, low: close - 1, close };
+    });
+
+  /** A series that ends strong. */
+  const rising = (start: number, n = 60) =>
+    Array.from({ length: n }, (_, i) => {
+      const close = start + i;
+      return { date: isoDay(i), high: close + 1, low: close - 1, close };
+    });
+
+  function isoDay(i: number): string {
+    return new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10);
+  }
+
+  it('finds the falling symbol and leaves the rising one out', () => {
+    const out = screenOversold([
+      { symbol: 'DOWN', price: 41, bars: falling(100) },
+      { symbol: 'UP', price: 159, bars: rising(100) },
+    ]);
+
+    expect(out.map((c) => c.symbol)).toEqual(['DOWN']);
+    expect(out[0].oversold).toBe(true);
+  });
+
+  it('keeps the two signals separate rather than collapsing them to a score', () => {
+    // A screener you can't interrogate is one you won't trust with money.
+    const [candidate] = screenOversold([{ symbol: 'DOWN', price: 41, bars: falling(100) }]);
+    expect(candidate).toMatchObject({
+      oversold: expect.any(Boolean),
+      nearLow: expect.any(Boolean),
+    });
+    expect(candidate.rsi).not.toBeNull();
+  });
+
+  it('qualifies on nearness alone, without being oversold', () => {
+    // A slow bleed to the lows that never triggers RSI is still worth seeing.
+    const flat = Array.from({ length: 60 }, (_, i) => ({
+      date: isoDay(i),
+      high: 101,
+      low: 100,
+      close: 100,
+    }));
+    const [candidate] = screenOversold([{ symbol: 'FLAT', price: 100, bars: flat }]);
+    expect(candidate.nearLow).toBe(true);
+    expect(candidate.oversold).toBe(false);
+  });
+
+  it('sorts most oversold first', () => {
+    const out = screenOversold([
+      { symbol: 'MILD', price: 71, bars: falling(100).slice(0, 30) },
+      { symbol: 'DEEP', price: 41, bars: falling(100) },
+    ]);
+    expect(out[0].rsi! <= out[1].rsi!).toBe(true);
+  });
+
+  it('puts unknown RSI last rather than treating it as zero', () => {
+    // Too few bars to compute RSI. Sorting it as 0 would rank "we don't know"
+    // as the most oversold thing on the screen.
+    const out = screenOversold([
+      { symbol: 'SHORT', price: 100, bars: [{ date: '2026-01-01', high: 101, low: 100, close: 100 }] },
+      { symbol: 'DEEP', price: 41, bars: falling(100) },
+    ]);
+    expect(out[out.length - 1].symbol).toBe('SHORT');
+  });
+
+  it('returns nothing for an empty input', () => {
+    expect(screenOversold([])).toEqual([]);
+  });
+});
+
+describe('screenOversold — nearness is measured against the 52-week low', () => {
+  function isoDay(i: number): string {
+    return new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10);
+  }
+
+  it('does not call a stock at its 52-week high "near the lows"', () => {
+    // Early in a calendar month the month low IS the last day or two's low, so
+    // including it made every symbol qualify — a stock making new highs most
+    // of all, which is the exact opposite of the setup.
+    const rising = Array.from({ length: 60 }, (_, i) => {
+      const close = 100 + i;
+      return { date: isoDay(i), high: close + 1, low: close - 1, close };
+    });
+
+    const out = screenOversold([{ symbol: 'UP', price: 159, bars: rising }]);
+    expect(out).toEqual([]);
   });
 });

@@ -376,3 +376,102 @@ function shiftYear(iso: string, years: number): string {
   const day = m === '02' && d === '29' ? '28' : d;
   return `${shifted}-${m}-${day}`;
 }
+
+/** One symbol's answer to "is this oversold, and is it near a low?" */
+export interface OversoldCandidate {
+  symbol: string;
+  price: number;
+  rsi: number | null;
+  /** Percent above the 52-week low. Null when it can't be computed. */
+  fromLow52: number | null;
+  fromMonthLow: number | null;
+  /** RSI at or below the oversold threshold. */
+  oversold: boolean;
+  /** Price within `nearPercent` of a period low. */
+  nearLow: boolean;
+}
+
+export interface ScreenOversoldOptions {
+  /** How close to a low still counts as "near". Default 5%. */
+  nearPercent?: number;
+  /** RSI threshold. Default RSI_OVERSOLD (30). */
+  threshold?: number;
+}
+
+/**
+ * Screen a set of symbols for the setup people actually describe.
+ *
+ * The brief was "oversold, near the lows" — a conjunction of two signals, and
+ * the reason both are returned separately rather than collapsed into one score.
+ * A single number would rank correctly and explain nothing, and a screener you
+ * can't interrogate is a screener you won't trust with money.
+ *
+ * A symbol qualifies on EITHER signal, because the interesting cases are often
+ * one without the other: oversold well off the lows is a pullback in an uptrend,
+ * near the lows without being oversold is a slow bleed. Both are worth seeing,
+ * and the flags say which is which.
+ *
+ * Sorted by RSI ascending — most oversold first — with unknowns last rather
+ * than sorted as zero, which would put "we couldn't compute this" at the top.
+ */
+export function screenOversold(
+  rows: {
+    symbol: string;
+    price: number;
+    bars: { date: string; high: number; low: number; close: number }[];
+  }[],
+  options: ScreenOversoldOptions = {},
+): OversoldCandidate[] {
+  const nearPercent = options.nearPercent ?? 5;
+  const threshold = options.threshold ?? RSI_OVERSOLD;
+
+  const candidates = rows.map((row): OversoldCandidate => {
+    const rsiSeries = computeRSI(row.bars.map((b) => b.close));
+    const rsi = lastDefinedValue(rsiSeries);
+
+    const asOf = row.bars[row.bars.length - 1]?.date.slice(0, 10);
+    const levels = asOf ? periodLevels(row.bars, row.price, asOf) : [];
+    const fromLow52 = levels.find((l) => l.id === 'low52')?.distancePercent ?? null;
+    const fromMonthLow = levels.find((l) => l.id === 'monthLow')?.distancePercent ?? null;
+
+    /*
+      Nearness is measured against the 52-WEEK low only.
+
+      Including the month low let a stock at its 52-week high qualify: early in
+      a month the "month low" is just the last day or two's low, so every
+      symbol is near it — including one making new highs, which is the exact
+      opposite of the setup being screened for.
+
+      The month low is still reported, because it is useful context once you
+      are looking at a name. It just doesn't get a vote on whether the name
+      appears at all.
+    */
+    const nearLow = fromLow52 !== null && fromLow52 >= 0 && fromLow52 <= nearPercent;
+
+    return {
+      symbol: row.symbol,
+      price: row.price,
+      rsi,
+      fromLow52,
+      fromMonthLow,
+      oversold: rsi !== null && rsi <= threshold,
+      nearLow,
+    };
+  });
+
+  return candidates
+    .filter((c) => c.oversold || c.nearLow)
+    .sort((a, b) => {
+      if (a.rsi === null && b.rsi === null) return a.symbol.localeCompare(b.symbol);
+      if (a.rsi === null) return 1;
+      if (b.rsi === null) return -1;
+      return a.rsi - b.rsi;
+    });
+}
+
+function lastDefinedValue(values: IndicatorSeries): number | null {
+  for (let i = values.length - 1; i >= 0; i -= 1) {
+    if (values[i] !== null) return values[i];
+  }
+  return null;
+}
