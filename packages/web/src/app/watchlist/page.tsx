@@ -2,8 +2,12 @@
 
 import { Navbar } from '@/components/navbar';
 import { WatchlistTable } from '@/components/watchlist/watchlist-table';
+import { OversoldScan } from '@/components/watchlist/oversold-scan';
+import { useWatchlistSymbols } from '@/lib/hooks';
 
 export default function WatchlistPage() {
+  const { symbols } = useWatchlistSymbols();
+
   return (
     <div className="min-h-screen bg-bg-primary">
       <Navbar />
@@ -16,6 +20,7 @@ export default function WatchlistPage() {
             Track your positions and market movers
           </p>
         </div>
+        <OversoldScan symbols={symbols} />
         <WatchlistTable />
       </main>
     </div>
