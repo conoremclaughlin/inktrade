@@ -16,19 +16,35 @@ import {
   oiDistributionQuery,
   tickerHistoryQuery,
   type HistoryPeriod,
+  OSCILLATOR_LABELS,
   type IndicatorId,
+  type OscillatorId,
 } from '@inktrade/client';
 import type { RootStackParamList } from '../navigation';
 import { api } from '../lib/api';
 import { CandlestickChart, type ChartMode } from '../components/CandlestickChart';
 import { OIChart } from '../components/OIChart';
+import { OscillatorPane } from '../components/OscillatorPane';
 import { OrderActivityList } from '../components/OrderActivityList';
 import { useOrderActivity } from '../hooks/useTrading';
 import { changeColor, colors, fonts, formatPercent, formatPrice, radii, spacing } from '../ui/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stock'>;
 
-const INDICATORS: IndicatorId[] = ['sma20', 'sma50', 'sma200', 'ema12', 'ema26', 'bollinger'];
+const INDICATORS: IndicatorId[] = [
+  'sma20',
+  'sma50',
+  'sma200',
+  'ema12',
+  'ema26',
+  // The two WSB traders keep naming: the 50 EMA and VWAP.
+  'ema50',
+  'vwap',
+  'bollinger',
+];
+
+/** Oscillators are exclusive — two stacked panes leave no room for price. */
+const OSCILLATORS: OscillatorId[] = ['rsi', 'macd'];
 
 export function StockScreen({ route, navigation }: Props) {
   const { symbol } = route.params;
@@ -37,6 +53,7 @@ export function StockScreen({ route, navigation }: Props) {
   const [period, setPeriod] = useState<HistoryPeriod>('1y');
   const [mode, setMode] = useState<ChartMode>('candlestick');
   const [active, setActive] = useState<IndicatorId[]>(['sma20', 'sma50']);
+  const [oscillator, setOscillator] = useState<OscillatorId | null>('rsi');
 
   const history = useQuery(tickerHistoryQuery(api, symbol, period));
   const activity = useOrderActivity(symbol, 25);
@@ -114,6 +131,21 @@ export function StockScreen({ route, navigation }: Props) {
         isActive={(id) => active.includes(id as IndicatorId)}
         onPress={(id) => toggleIndicator(id as IndicatorId)}
       />
+
+      {/*
+        Oscillators are their own pane and mutually exclusive: RSI runs 0-100
+        and MACD swings around zero, so neither can share the price axis and
+        two stacked panes would leave no room for price.
+      */}
+      <Chips
+        options={OSCILLATORS.map((id) => ({ id, label: OSCILLATOR_LABELS[id] }))}
+        isActive={(id) => id === oscillator}
+        onPress={(id) => setOscillator(oscillator === id ? null : (id as OscillatorId))}
+      />
+
+      {oscillator && points.length > 0 && (
+        <OscillatorPane points={points} oscillator={oscillator} />
+      )}
 
       {history.data && (
         <View style={styles.statsRow}>

@@ -5,6 +5,7 @@ import {
   computeBollinger,
   computeEMA,
   computeSMA,
+  computeVWAP,
   INDICATOR_COLORS,
   type IndicatorId,
   type TickerHistoryPoint,
@@ -53,6 +54,22 @@ function overlaySeries(points: TickerHistoryPoint[], indicators: IndicatorId[]) 
       case 'sma200': push(computeSMA(closes, 200), INDICATOR_COLORS.sma200); break;
       case 'ema12': push(computeEMA(closes, 12), INDICATOR_COLORS.ema12); break;
       case 'ema26': push(computeEMA(closes, 26), INDICATOR_COLORS.ema26); break;
+      case 'ema50': push(computeEMA(closes, 50), INDICATOR_COLORS.ema50); break;
+      case 'vwap':
+        // Session-anchored, so it needs the whole bar rather than the close.
+        push(
+          computeVWAP(
+            points.map((p) => ({
+              high: p.high,
+              low: p.low,
+              close: p.close,
+              volume: p.volume,
+              date: p.date,
+            })),
+          ),
+          INDICATOR_COLORS.vwap,
+        );
+        break;
       case 'bollinger': {
         const { upper, lower } = computeBollinger(closes, 20, 2);
         push(upper, INDICATOR_COLORS.bollinger);
