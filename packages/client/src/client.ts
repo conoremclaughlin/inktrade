@@ -17,6 +17,7 @@ import type {
   PortfolioSummary,
 } from './broker/types.js';
 import type { CostBasisDecision, CostBasisStrategy, SalePlan, TaxLot } from './tax-lots.js';
+import type { OversoldCandidate } from './indicators.js';
 import type { TradingMode, TradingModeDecision } from './trading-mode.js';
 
 /** What /api/portfolio returns — the summary plus which brokerage produced it. */
@@ -86,10 +87,33 @@ export interface ApiClient {
   reviewOrder(order: OrderRequest): Promise<OrderOutcome>;
   placeOrder(order: OrderRequest): Promise<OrderOutcome>;
 
+  /**
+   * Screen symbols for "oversold, near the lows".
+   *
+   * One call rather than one per symbol: the fan-out happens server-side,
+   * because every price source quotes a single symbol per request and doing
+   * that from a phone would be N round trips over a mobile link.
+   */
+  screenOversold(
+    symbols: string[],
+    options?: { rsi?: number; near?: number },
+  ): Promise<OversoldScreen>;
+
   getTradingMode(): Promise<TradingModeDecision>;
   setTradingMode(mode: TradingMode): Promise<TradingModeDecision>;
   getCostBasis(): Promise<CostBasisDecision>;
   setCostBasis(strategy: CostBasisStrategy): Promise<CostBasisDecision>;
+}
+
+export interface OversoldScreen {
+  scanned: number;
+  /** Symbols whose history couldn't be read. Reported, not silently omitted. */
+  skipped: string[];
+  /** Symbols beyond the server's per-scan cap. */
+  dropped: number;
+  threshold: number;
+  nearPercent: number;
+  candidates: OversoldCandidate[];
 }
 
 /** A review, a receipt, or a refusal — the plan rides along with all three. */
@@ -212,6 +236,23 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
     placeOrder(order) {
       return sendOrder(order, false);
+    },
+
+    screenOversold(symbols, options = {}) {
+      if (symbols.length === 0) {
+        return Promise.resolve({
+          scanned: 0,
+          skipped: [],
+          dropped: 0,
+          threshold: 30,
+          nearPercent: 5,
+          candidates: [],
+        });
+      }
+      const params = new URLSearchParams({ symbols: symbols.join(',') });
+      if (options.rsi !== undefined) params.set('rsi', String(options.rsi));
+      if (options.near !== undefined) params.set('near', String(options.near));
+      return request<OversoldScreen>(`/api/screener/oversold?${params}`);
     },
 
     getTradingMode() {

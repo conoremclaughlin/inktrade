@@ -19,6 +19,7 @@ import {
 } from '../hooks/useBrokerWatchlists';
 import { API_BASE_URL, API_URL_HINT } from '../lib/api';
 import { PositionRow } from '../components/PositionRow';
+import { OversoldScan } from '../components/OversoldScan';
 import { colors, fonts, radii, spacing } from '../ui/theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -129,6 +130,13 @@ function ListSection({
           <ActivityIndicator color={colors.accent} size="small" />
         </View>
       )}
+
+      {/*
+        Scanning belongs on the open list: that's the set of symbols in front
+        of you, and it's the only place the question "which of these is
+        oversold" has an obvious subject.
+      */}
+      {open && symbols.length > 0 && <OversoldScan symbols={symbols} />}
 
       {open && !detail.isLoading && symbols.length === 0 && (
         // The brokerage's count includes crypto, futures and indexes we filter

@@ -77,6 +77,8 @@ export const brokerKeys = {
   orders: (symbol?: string) => ['broker', 'orders', symbol ?? 'all'] as const,
   tradingMode: () => ['broker', 'trading-mode'] as const,
   costBasis: () => ['broker', 'cost-basis'] as const,
+  oversold: (symbols: string[]) =>
+    ['screener', 'oversold', [...symbols].sort().join(',')] as const,
 };
 
 /** Holdings move only on a fill, so they tolerate more staleness than quotes. */
@@ -197,5 +199,22 @@ export function costBasisQuery(api: ApiClient) {
     queryKey: brokerKeys.costBasis(),
     queryFn: () => api.getCostBasis(),
     staleTime: SETTINGS_STALE_MS,
+  };
+}
+
+/**
+ * An oversold scan over a set of symbols.
+ *
+ * Disabled until asked for. A scan is N upstream history fetches, so it runs
+ * when someone presses the button — not because a screen happened to mount.
+ */
+export function oversoldQuery(api: ApiClient, symbols: string[], enabled: boolean) {
+  return {
+    queryKey: brokerKeys.oversold(symbols),
+    queryFn: () => api.screenOversold(symbols),
+    enabled: enabled && symbols.length > 0,
+    // Indicators move on daily bars; rescanning every minute would cost a lot
+    // to learn nothing.
+    staleTime: 10 * 60_000,
   };
 }
