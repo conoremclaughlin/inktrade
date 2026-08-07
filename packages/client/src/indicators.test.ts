@@ -9,7 +9,9 @@ import {
   computeVWAP,
   distanceFromLevel,
   periodLevels,
+  findPivots,
   screenOversold,
+  supportResistance,
   warmupBars,
 } from './indicators.js';
 
@@ -405,5 +407,141 @@ describe('screenOversold — nearness is measured against the 52-week low', () =
 
     const out = screenOversold([{ symbol: 'UP', price: 159, bars: rising }]);
     expect(out).toEqual([]);
+  });
+});
+
+describe('findPivots', () => {
+  const bars = (highs: number[]) =>
+    highs.map((h, i) => ({ date: `2026-01-${String(i + 1).padStart(2, '0')}`, high: h, low: h - 1 }));
+
+  it('finds a turn, not just the tallest bar so far', () => {
+    // 100 is the peak of a tent — higher than everything within the window on
+    // BOTH sides, which is what makes it a turn.
+    const series = bars([90, 92, 95, 97, 99, 100, 99, 97, 95, 92, 90]);
+    const highs = findPivots(series, 5).filter((p) => p.kind === 'high');
+    expect(highs).toHaveLength(1);
+    expect(highs[0].price).toBe(100);
+  });
+
+  it('does not call the newest bar of a rally a pivot', () => {
+    // A steady climb: the last bar is the highest, but nothing has turned. If
+    // this counted, every rally would be reported as blocked by resistance.
+    const series = bars([90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100]);
+    expect(findPivots(series, 5).filter((p) => p.kind === 'high')).toHaveLength(0);
+  });
+
+  it('cannot see pivots inside the window at either edge', () => {
+    // The right side of a recent bar hasn't happened yet, so it can't be known
+    // to be a turn. Honest rather than unfortunate.
+    const series = bars([100, 90, 90, 90, 90, 90, 90, 90, 90, 90, 100]);
+    expect(findPivots(series, 5)).toHaveLength(0);
+  });
+});
+
+describe('supportResistance', () => {
+  /** A market that bounces between 100 and 120 three times, ending at 110. */
+  function oscillating() {
+    const shape = [110, 104, 100, 104, 110, 116, 120, 116, 110, 104, 100, 104, 110, 116, 120, 116, 110, 104, 100, 104, 110, 116, 120, 116, 110];
+    return shape.map((close, i) => ({
+      date: `2026-01-${String(i + 1).padStart(2, '0')}`,
+      high: close + 0.2,
+      low: close - 0.2,
+      close,
+    }));
+  }
+
+  it('finds the floor below and the ceiling above', () => {
+    const levels = supportResistance(oscillating(), 110, { window: 2 });
+
+    const support = levels.filter((l) => l.kind === 'support');
+    const resistance = levels.filter((l) => l.kind === 'resistance');
+
+    expect(support.length).toBeGreaterThan(0);
+    expect(resistance.length).toBeGreaterThan(0);
+    expect(support[0].price).toBeCloseTo(99.8, 0);
+    expect(resistance[0].price).toBeCloseTo(120.2, 0);
+  });
+
+  it('counts repeated visits as strength', () => {
+    // The floor is touched three times in this series, and one touch is a
+    // coincidence rather than a level.
+    const [support] = supportResistance(oscillating(), 110, { window: 2 });
+    expect(support.touches).toBeGreaterThanOrEqual(2);
+  });
+
+  it('ignores a price only ever visited once', () => {
+    const once = [
+      ...oscillating(),
+      { date: '2026-02-01', high: 200, low: 199, close: 199.5 },
+      ...oscillating().map((b, i) => ({ ...b, date: `2026-03-${String(i + 1).padStart(2, '0')}` })),
+    ];
+    const levels = supportResistance(once, 110, { window: 2 });
+    expect(levels.some((l) => l.price > 150)).toBe(false);
+  });
+
+  it('drops levels price is already sitting on', () => {
+    // A level at the current price describes now; it does not predict where
+    // price might stop.
+    const levels = supportResistance(oscillating(), 120, { window: 2, tolerancePercent: 3 });
+    expect(levels.every((l) => Math.abs(l.distancePercent) > 3)).toBe(true);
+  });
+
+  it('clusters proportionally, so $1 means different things at $3 and $1000', () => {
+    const cheap = [98, 100, 98, 100.5, 98, 100.2, 98].flatMap((p, i) =>
+      Array.from({ length: 3 }, (_, j) => ({
+        date: `2026-01-${String(i * 3 + j + 1).padStart(2, '0')}`,
+        high: p + (j === 1 ? 0.3 : -0.5),
+        low: p - (j === 1 ? 0.5 : 0.1),
+        close: p,
+      })),
+    );
+    const levels = supportResistance(cheap, 99, { window: 1, tolerancePercent: 1.5 });
+    // 100, 100.5 and 100.2 are within 1.5% of each other and must be one level.
+    expect(levels.filter((l) => l.price > 99 && l.price < 102).length).toBeLessThanOrEqual(1);
+  });
+
+  it('returns nothing rather than throwing on a short or broken series', () => {
+    expect(supportResistance([], 100)).toEqual([]);
+    expect(supportResistance(oscillating(), 0)).toEqual([]);
+    expect(supportResistance(oscillating(), Number.NaN)).toEqual([]);
+  });
+});
+
+describe('supportResistance — distance cap', () => {
+  it('drops levels too far away to act on', () => {
+    // Found against live MU, which ran from ~$113 to ~$881 in a year. The
+    // method reported "support" at $113 — 87% below price. By the time price
+    // returned there it would be a different market, and the level would carry
+    // none of the meaning that made it one.
+    const climb = Array.from({ length: 120 }, (_, i) => {
+      // A staircase: repeated pauses that each form a real level, far apart.
+      const base = 100 + Math.floor(i / 20) * 200;
+      const wobble = i % 20 < 10 ? 0 : 4;
+      const close = base + wobble;
+      return {
+        date: `2026-${String(Math.floor(i / 28) + 1).padStart(2, '0')}-${String((i % 28) + 1).padStart(2, '0')}`,
+        high: close + 1,
+        low: close - 1,
+        close,
+      };
+    });
+
+    const price = climb[climb.length - 1].close;
+    const levels = supportResistance(climb, price, { window: 3 });
+
+    expect(levels.every((l) => Math.abs(l.distancePercent) <= 25)).toBe(true);
+  });
+
+  it('respects a caller-supplied cap', () => {
+    const climb = Array.from({ length: 120 }, (_, i) => {
+      const close = 100 + i * 5;
+      return { date: `2026-01-${String((i % 28) + 1).padStart(2, '0')}`, high: close + 1, low: close - 1, close };
+    });
+    const price = climb[climb.length - 1].close;
+    expect(
+      supportResistance(climb, price, { window: 3, maxDistancePercent: 5 }).every(
+        (l) => Math.abs(l.distancePercent) <= 5,
+      ),
+    ).toBe(true);
   });
 });

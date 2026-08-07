@@ -475,3 +475,176 @@ function lastDefinedValue(values: IndicatorSeries): number | null {
   }
   return null;
 }
+
+/** A swing point: a bar that turned the market. */
+export interface Pivot {
+  index: number;
+  price: number;
+  kind: 'high' | 'low';
+  date: string;
+}
+
+/**
+ * Swing highs and lows.
+ *
+ * A pivot high is a bar whose high exceeds every bar within `window` on both
+ * sides. Requiring both sides is what makes it a turn rather than a step: the
+ * highest bar of the last ten is often just the newest bar in an uptrend, and
+ * calling that a resistance level would mark every rally as blocked.
+ *
+ * The cost is that the most recent `window` bars can never be pivots — their
+ * right side hasn't happened yet. That is honest rather than unfortunate: a
+ * level nobody has traded away from is not yet a level.
+ */
+export function findPivots(
+  bars: { date: string; high: number; low: number }[],
+  window = 5,
+): Pivot[] {
+  const pivots: Pivot[] = [];
+
+  for (let i = window; i < bars.length - window; i += 1) {
+    const bar = bars[i];
+    let isHigh = true;
+    let isLow = true;
+
+    for (let j = i - window; j <= i + window; j += 1) {
+      if (j === i) continue;
+      if (bars[j].high >= bar.high) isHigh = false;
+      if (bars[j].low <= bar.low) isLow = false;
+      if (!isHigh && !isLow) break;
+    }
+
+    if (isHigh) pivots.push({ index: i, price: bar.high, kind: 'high', date: bar.date });
+    if (isLow) pivots.push({ index: i, price: bar.low, kind: 'low', date: bar.date });
+  }
+
+  return pivots;
+}
+
+/** A price other traders have reacted to more than once. */
+export interface SwingLevel {
+  price: number;
+  /** Swing points clustered here. One touch is a coincidence, not a level. */
+  touches: number;
+  kind: 'support' | 'resistance';
+  /** Percent from the current price. Negative for support. */
+  distancePercent: number;
+  /** ISO date of the most recent touch — a level ages. */
+  lastTouch: string;
+}
+
+export interface SupportResistanceOptions {
+  /** Bars either side that a pivot must exceed. Default 5. */
+  window?: number;
+  /** How close two pivots must be to count as the same level, in percent. */
+  tolerancePercent?: number;
+  /** Minimum swing points before a price counts as a level. Default 2. */
+  minTouches?: number;
+  /** Levels returned per side. Default 3. */
+  limit?: number;
+  /**
+   * Furthest a level can be and still be worth showing, in percent.
+   *
+   * Real data forced this. On a stock that ran from $113 to $881 in a year,
+   * the method dutifully reported "support" at $113 — 87% below the price.
+   * That is not support, it is archaeology: by the time price returned there
+   * the market would be a different one, and the level would carry none of
+   * the meaning that made it a level.
+   */
+  maxDistancePercent?: number;
+}
+
+/**
+ * Support below and resistance above, from clustered swing points.
+ *
+ * The method is deliberately the boring one — pivots, cluster, count touches —
+ * because every exotic alternative is harder to explain and no easier to
+ * trust. What matters is the three judgements around it:
+ *
+ *  1. **Clustering is proportional, not absolute.** A $1 gap is the same level
+ *     on a $1,000 stock and two different worlds on a $3 one, so the tolerance
+ *     is a percentage.
+ *  2. **One touch is not a level.** A single swing point is where price
+ *     happened to turn once; a level is where it turned repeatedly. The
+ *     default minimum is two, and levels with more are ranked higher.
+ *  3. **Recency breaks ties.** A ceiling from fourteen months ago and one from
+ *     last week are not equally interesting, so touches are weighted by how
+ *     recent the cluster's last touch is.
+ *
+ * Levels within the clustering tolerance of the current price are dropped:
+ * price is sitting on them, so they describe now rather than predicting where
+ * it might stop.
+ */
+export function supportResistance(
+  bars: { date: string; high: number; low: number; close: number }[],
+  price: number,
+  options: SupportResistanceOptions = {},
+): SwingLevel[] {
+  const window = options.window ?? 5;
+  const tolerance = options.tolerancePercent ?? 1.5;
+  const minTouches = options.minTouches ?? 2;
+  const limit = options.limit ?? 3;
+  const maxDistance = options.maxDistancePercent ?? 25;
+
+  if (bars.length < window * 2 + 1 || !Number.isFinite(price) || price <= 0) return [];
+
+  const pivots = findPivots(bars, window);
+  if (pivots.length === 0) return [];
+
+  // Cluster by proximity, walking in price order so neighbours meet.
+  const sorted = [...pivots].sort((a, b) => a.price - b.price);
+  const clusters: Pivot[][] = [];
+
+  for (const pivot of sorted) {
+    const current = clusters[clusters.length - 1];
+    const anchor = current?.[0]?.price;
+    if (current && anchor !== undefined && percentApart(pivot.price, anchor) <= tolerance) {
+      current.push(pivot);
+    } else {
+      clusters.push([pivot]);
+    }
+  }
+
+  const newest = bars.length - 1;
+
+  const levels = clusters
+    .filter((cluster) => cluster.length >= minTouches)
+    .map((cluster): SwingLevel & { rank: number } => {
+      const levelPrice = cluster.reduce((sum, p) => sum + p.price, 0) / cluster.length;
+      const lastIndex = Math.max(...cluster.map((p) => p.index));
+      const lastTouch = cluster.find((p) => p.index === lastIndex)!.date;
+      // A touch from the far edge of the window counts roughly half of one
+      // from today — enough to break ties without erasing older structure.
+      const recency = 0.5 + 0.5 * (lastIndex / Math.max(newest, 1));
+
+      return {
+        price: levelPrice,
+        touches: cluster.length,
+        kind: levelPrice >= price ? 'resistance' : 'support',
+        distancePercent: ((levelPrice - price) / price) * 100,
+        lastTouch,
+        rank: cluster.length * recency,
+      };
+    })
+    .filter(
+      (level) =>
+        // Price is already at these; they say where it is, not where it may stop.
+        Math.abs(level.distancePercent) > tolerance &&
+        // And these are too far away to act on — see maxDistancePercent.
+        Math.abs(level.distancePercent) <= maxDistance,
+    );
+
+  const pick = (kind: 'support' | 'resistance') =>
+    levels
+      .filter((l) => l.kind === kind)
+      // Nearest first within a side — the next level that matters is the one
+      // price reaches first, not the strongest one somewhere far away.
+      .sort((a, b) => Math.abs(a.distancePercent) - Math.abs(b.distancePercent))
+      .slice(0, limit);
+
+  return [...pick('support'), ...pick('resistance')].map(({ rank: _rank, ...level }) => level);
+}
+
+function percentApart(a: number, b: number): number {
+  return Math.abs((a - b) / b) * 100;
+}

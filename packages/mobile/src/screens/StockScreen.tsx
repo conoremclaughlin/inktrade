@@ -27,6 +27,7 @@ import { OIChart } from '../components/OIChart';
 import { OscillatorPane } from '../components/OscillatorPane';
 import { VolumePane } from '../components/VolumePane';
 import { PeriodLevels } from '../components/PeriodLevels';
+import { SwingLevels } from '../components/SwingLevels';
 import { OrderActivityList } from '../components/OrderActivityList';
 import { useOrderActivity } from '../hooks/useTrading';
 import { changeColor, colors, fonts, formatPercent, formatPrice, radii, spacing } from '../ui/theme';
@@ -158,6 +159,14 @@ export function StockScreen({ route, navigation }: Props) {
       */}
       <Section title="Levels">
         <PeriodLevels points={points} price={last?.close ?? null} />
+      </Section>
+
+      {/*
+        Period levels are facts about the range; these are prices the market
+        has actually reacted to. Different questions, so a separate section.
+      */}
+      <Section title="Support & resistance">
+        <SwingLevels points={points} price={last?.close ?? null} />
       </Section>
 
       {history.data && (
