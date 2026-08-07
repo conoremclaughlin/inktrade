@@ -65,25 +65,75 @@ function mapContract(
   };
 }
 
+/**
+ * A Yahoo quote, with the day's move recomputed rather than trusted.
+ *
+ * Yahoo's own change fields are wrong for some symbols. Measured on ^TNX (the
+ * 10-year yield): price 4.67, previous close 4.617, and a reported change of
+ * -4.617 — exactly the negative of the previous close, i.e. computed against a
+ * price of zero. That renders as "10Y -49.7%", which on a macro strip is not a
+ * small cosmetic error but an alarming and completely false claim.
+ *
+ * Price and previous close are two numbers we can see and sanity-check;
+ * `regularMarketChange` is one we cannot. So the move is derived from the two
+ * when both are usable, and the vendor's figure is the fallback rather than
+ * the source.
+ */
+export function normalizeYahooQuote(
+  raw: Record<string, unknown>,
+  /**
+   * The symbol we asked for.
+   *
+   * Authoritative: Yahoo's response union includes rows that carry no symbol
+   * at all, and a quote that can't say what it's a quote of is worse than
+   * useless on a screen full of them.
+   */
+  requestedSymbol?: string,
+): Quote {
+  const price = numberAt(raw, 'regularMarketPrice') ?? 0;
+  const previousClose = numberAt(raw, 'regularMarketPreviousClose') ?? 0;
+
+  const derivable = Number.isFinite(price) && previousClose > 0;
+  const change = derivable
+    ? price - previousClose
+    : (numberAt(raw, 'regularMarketChange') ?? 0);
+  const changePercent = derivable
+    ? ((price - previousClose) / previousClose) * 100
+    : (numberAt(raw, 'regularMarketChangePercent') ?? 0);
+
+  return {
+    symbol: (typeof raw.symbol === 'string' ? raw.symbol : undefined) ?? requestedSymbol ?? '',
+    price,
+    change,
+    changePercent,
+    volume: numberAt(raw, 'regularMarketVolume') ?? 0,
+    high: numberAt(raw, 'regularMarketDayHigh') ?? 0,
+    low: numberAt(raw, 'regularMarketDayLow') ?? 0,
+    open: numberAt(raw, 'regularMarketOpen') ?? 0,
+    previousClose,
+    marketCap: numberAt(raw, 'marketCap'),
+    timestamp: new Date(),
+  };
+}
+
+/**
+ * Read a numeric field, tolerating a response union that TypeScript can't
+ * narrow — yahoo-finance2's quote() can return rows with none of these fields.
+ */
+function numberAt(raw: Record<string, unknown>, key: string): number | undefined {
+  const value = raw[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 export class YahooMarketService implements MarketDataService {
   readonly name = 'yahoo-finance';
   private yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
   async getQuote(symbol: string): Promise<Quote> {
-    const result = await this.yf.quote(symbol);
-    return {
-      symbol: result.symbol,
-      price: result.regularMarketPrice ?? 0,
-      change: result.regularMarketChange ?? 0,
-      changePercent: result.regularMarketChangePercent ?? 0,
-      volume: result.regularMarketVolume ?? 0,
-      high: result.regularMarketDayHigh ?? 0,
-      low: result.regularMarketDayLow ?? 0,
-      open: result.regularMarketOpen ?? 0,
-      previousClose: result.regularMarketPreviousClose ?? 0,
-      marketCap: result.marketCap ?? undefined,
-      timestamp: new Date(),
-    };
+    return normalizeYahooQuote(
+      (await this.yf.quote(symbol)) as unknown as Record<string, unknown>,
+      symbol,
+    );
   }
 
   async getQuotes(symbols: string[]): Promise<Quote[]> {
