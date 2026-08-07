@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   atmIndex,
+  bookCoverage,
   contractsForExpiry,
   defaultTarget,
   expiryKey,
+  hasBook,
   isModelled,
+  strikesNearTheMoney,
   type WireOptionContract,
 } from './analytics.js';
 
@@ -123,5 +126,65 @@ describe('defaultTarget', () => {
 
   it('rounds to the cent', () => {
     expect(defaultTarget(33.333, 'call')).toBe(36.67);
+  });
+});
+
+describe('hasBook / bookCoverage', () => {
+  it('accepts a contract with either side quoted', () => {
+    expect(hasBook(wire({ bid: 4.9, ask: 0 }))).toBe(true);
+    expect(hasBook(wire({ bid: 0, ask: 5.1 }))).toBe(true);
+  });
+
+  it('rejects an empty book, where the mark is a stale print', () => {
+    expect(hasBook(wire({ bid: 0, ask: 0 }))).toBe(false);
+  });
+
+  it('measures how much of a ladder is live', () => {
+    const ladder = [
+      wire({ strike: 90, bid: 1, ask: 2 }),
+      wire({ strike: 95, bid: 0, ask: 0 }),
+      wire({ strike: 100, bid: 0, ask: 0 }),
+      wire({ strike: 105, bid: 0, ask: 0 }),
+    ];
+    expect(bookCoverage(ladder)).toBe(0.25);
+  });
+
+  it('reports 0 for an empty ladder rather than dividing by zero', () => {
+    expect(bookCoverage([])).toBe(0);
+  });
+});
+
+describe('strikesNearTheMoney', () => {
+  const ladder = Array.from({ length: 60 }, (_, i) => wire({ strike: 400 + i * 20 }));
+  // strikes 400 .. 1580, spot 881
+
+  it('trims a long ladder to the strikes people choose between', () => {
+    const near = strikesNearTheMoney(ladder, 881);
+    expect(near.length).toBeLessThan(ladder.length);
+    for (const c of near) {
+      expect(Math.abs(c.strike - 881) / 881).toBeLessThanOrEqual(0.2);
+    }
+  });
+
+  it('keeps them in strike order', () => {
+    const near = strikesNearTheMoney(ladder, 881);
+    expect(near.map((c) => c.strike)).toEqual([...near.map((c) => c.strike)].sort((a, b) => a - b));
+  });
+
+  it('leaves a short ladder alone', () => {
+    const short = [wire({ strike: 100 }), wire({ strike: 110 })];
+    expect(strikesNearTheMoney(short, 105)).toHaveLength(2);
+  });
+
+  it('widens rather than returning two rows on a coarse ladder', () => {
+    // $50 steps around a $100 stock: +-20% is one strike either side.
+    const coarse = Array.from({ length: 20 }, (_, i) => wire({ strike: 50 + i * 50 }));
+    const near = strikesNearTheMoney(coarse, 100);
+    expect(near.length).toBeGreaterThanOrEqual(12);
+    expect(near.map((c) => c.strike)).toEqual([...near.map((c) => c.strike)].sort((a, b) => a - b));
+  });
+
+  it('returns everything when the spot is unknown', () => {
+    expect(strikesNearTheMoney(ladder, 0)).toHaveLength(ladder.length);
   });
 });

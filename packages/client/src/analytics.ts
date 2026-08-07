@@ -138,3 +138,72 @@ export function defaultTarget(
 export function isModelled(contract: WireOptionContract): boolean {
   return contract.greeks.impliedVolatility > 0;
 }
+
+/**
+ * Is there a live two-sided market on this contract?
+ *
+ * Without one the mark falls back to the last trade, which has no age attached
+ * to it — it may be from minutes ago or from days ago, struck when the
+ * underlying was somewhere else entirely. Every number derived from it inherits
+ * that.
+ *
+ * Measured on MU's Aug 10 ladder overnight, where all 115 strikes had an empty
+ * book: premiums ran 675 -> $169.38, 685 -> $160.85, then back UP to
+ * 687.5 -> $195.45 and 712.5 -> $219.09. A premium curve cannot rise with the
+ * strike; those quotes simply weren't struck at the same time as each other.
+ * Solving volatility per contract makes each one internally consistent and does
+ * nothing about that, so probability came out 42%, 43%, 100%, 47%, 100%.
+ *
+ * So the flag exists to be shown, not to be silently corrected. Fitting a smile
+ * across the strikes would smooth it over and hide the fact that the inputs are
+ * stale, which is the thing worth knowing before sizing a trade on them.
+ */
+export function hasBook(contract: WireOptionContract): boolean {
+  return contract.bid > 0 || contract.ask > 0;
+}
+
+/**
+ * The strikes worth showing: those within `percent` of the money.
+ *
+ * MU lists 115 strikes for a single weekly, running from 450 to well past
+ * 1000 against a spot of 881. Rendering all of them puts the ladder's first
+ * row 60% in the money — strikes nobody is choosing between, which are also
+ * the ones with the stalest prints — and buries everything below it.
+ *
+ * 12% rather than something wider because the window is a fraction of price,
+ * and price scale varies enormously: 20% of an $881 stock is $176 either way,
+ * which on a three-day option covers strikes that would need a move nobody is
+ * pricing. The 1% probabilities out there are real, just not decisions.
+ *
+ * Widens rather than returning a stub when the window is too thin: some
+ * underlyings list strikes in $50 steps, where ±20% is two rows and a ladder
+ * of two is worse than a ladder that reaches slightly further than asked.
+ */
+export function strikesNearTheMoney(
+  contracts: WireOptionContract[],
+  underlyingPrice: number,
+  percent = 12,
+  minimum = 12,
+): WireOptionContract[] {
+  if (contracts.length <= minimum || underlyingPrice <= 0) return contracts;
+
+  const near = contracts.filter(
+    (c) => Math.abs(c.strike - underlyingPrice) / underlyingPrice <= percent / 100,
+  );
+  if (near.length >= minimum) return near;
+
+  // Fall back to the N nearest by distance, then restore strike order.
+  return [...contracts]
+    .sort(
+      (a, b) =>
+        Math.abs(a.strike - underlyingPrice) - Math.abs(b.strike - underlyingPrice),
+    )
+    .slice(0, minimum)
+    .sort((a, b) => a.strike - b.strike);
+}
+
+/** How much of a ladder is quoted from a live book rather than a stale print. */
+export function bookCoverage(contracts: WireOptionContract[]): number {
+  if (contracts.length === 0) return 0;
+  return contracts.filter(hasBook).length / contracts.length;
+}

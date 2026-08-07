@@ -8,7 +8,7 @@ import {
   type LeverageBand,
   type ProbabilityBand,
 } from '@inktrade/engine/math';
-import { isModelled, type WireOptionContract } from '@inktrade/client';
+import { hasBook, isModelled, type WireOptionContract } from '@inktrade/client';
 import { colors, fonts, radii, spacing } from '../ui/theme';
 
 /*
@@ -133,6 +133,13 @@ export function StrikeLadder({
             <View style={[styles.strikeCol, styles.strikeCell]}>
               <Text style={styles.strike}>{contract.strike}</Text>
               {/*
+                A strike quoted off a stale print sits beside strikes quoted off
+                other, differently stale prints — which is how a premium curve
+                ends up rising with the strike. Marking each one is the only way
+                the ladder stops reading as a single coherent snapshot.
+              */}
+              {!hasBook(contract) && <Text style={styles.stale}>STALE</Text>}
+              {/*
                 In/out of the money is read off the strike against spot rather
                 than the contract's own inTheMoney flag: the flag was computed
                 when the chain was fetched, and a stale one mislabels the whole
@@ -217,6 +224,12 @@ const styles = StyleSheet.create({
   },
   itm: {
     color: colors.textTertiary,
+    fontFamily: fonts.mono,
+    fontSize: 8,
+    letterSpacing: 0.5,
+  },
+  stale: {
+    color: colors.amber,
     fontFamily: fonts.mono,
     fontSize: 8,
     letterSpacing: 0.5,

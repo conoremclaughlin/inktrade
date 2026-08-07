@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,11 +12,13 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import {
   atmIndex,
+  bookCoverage,
   chainGridQuery,
   contractsForExpiry,
   defaultTarget,
   expiryKey,
   quotesQuery,
+  strikesNearTheMoney,
   type WireOptionContract,
 } from '@inktrade/client';
 import type { OptionType } from '@inktrade/engine/math';
@@ -51,6 +54,8 @@ export function CalculatorScreen() {
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [target, setTarget] = useState<number | null>(null);
   const [targetDraft, setTargetDraft] = useState('');
+  const [showAllStrikes, setShowAllStrikes] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const quote = useQuery(quotesQuery(api, [symbol]));
   const grid = useQuery(
@@ -91,10 +96,23 @@ export function CalculatorScreen() {
     setTargetDraft(fresh.toFixed(2));
   }, [spot === null, symbol, optionType]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const column = useMemo(
+  const fullColumn = useMemo(
     () => (expiry ? contractsForExpiry(contracts, expiry) : []),
     [contracts, expiry],
   );
+
+  /**
+   * Near the money by default.
+   *
+   * MU's weekly lists 115 strikes from 450 upward against a spot of 881, so
+   * the untrimmed ladder opens 60% in the money and puts everything else —
+   * including the contract detail below it — a hundred rows away.
+   */
+  const column = useMemo(
+    () => (spot === null || showAllStrikes ? fullColumn : strikesNearTheMoney(fullColumn, spot)),
+    [fullColumn, spot, showAllStrikes],
+  );
+  const trimmed = fullColumn.length - column.length;
 
   const rows = useMemo(
     () => (spot !== null && target !== null ? scoreLadder(column, spot, target) : []),
@@ -117,6 +135,7 @@ export function CalculatorScreen() {
     setExpOffset(0);
     setExpiry(null);
     setSelectedStrike(null);
+    setShowAllStrikes(false);
   };
 
   const commitTarget = () => {
@@ -235,6 +254,7 @@ export function CalculatorScreen() {
         onSelect={(e) => {
           setExpiry(e);
           setSelectedStrike(null);
+          setShowAllStrikes(false);
         }}
         canGoBack={expOffset > 0}
         canGoForward={(grid.data?.allExpirations.length ?? 0) > expOffset + EXPIRATION_WINDOW}
@@ -254,8 +274,41 @@ export function CalculatorScreen() {
         </View>
       )}
 
+      {/*
+        A failed grid used to be a dead end. React Query holds the error and
+        tabs don't remount, so switching away and back showed the same stale
+        failure forever — the screen looked broken rather than retryable, and
+        the only recovery was killing the app.
+      */}
       {grid.error && !grid.isLoading && (
-        <Text style={styles.error}>{(grid.error as Error).message}</Text>
+        <View style={styles.errorBlock}>
+          <Text style={styles.error}>
+            Couldn&apos;t load the chain for {symbol}. {(grid.error as Error).message}
+          </Text>
+          <Pressable
+            onPress={() => grid.refetch()}
+            style={styles.retry}
+            accessibilityRole="button"
+          >
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/*
+        Most of the ladder quoted from last trades rather than a live book —
+        the normal state outside market hours. Worth saying once at the top
+        rather than only per row, because the failure it causes is a
+        comparison between strikes, not a doubt about any single one.
+      */}
+      {!grid.isLoading && column.length > 0 && bookCoverage(column) < 0.5 && (
+        <View style={styles.staleBanner}>
+          <Text style={styles.staleText}>
+            No live market on this expiration. Premiums are last trades struck at
+            different times, so leverage and probability won&apos;t line up strike to
+            strike — the curve can even run backwards.
+          </Text>
+        </View>
       )}
 
       {!grid.isLoading && spot !== null && target !== null && (
@@ -263,13 +316,56 @@ export function CalculatorScreen() {
           rows={rows}
           underlyingPrice={spot}
           selectedStrike={selectedStrike}
-          onSelect={(c: WireOptionContract) => setSelectedStrike(c.strike)}
+          onSelect={(c: WireOptionContract) => {
+            setSelectedStrike(c.strike);
+            setDetailOpen(true);
+          }}
         />
       )}
 
-      {selected && spot !== null && target !== null && (
-        <ContractDetail contract={selected} underlyingPrice={spot} targetPrice={target} />
+      {trimmed > 0 && !grid.isLoading && (
+        <Pressable
+          onPress={() => setShowAllStrikes(true)}
+          style={styles.showAll}
+          accessibilityRole="button"
+        >
+          <Text style={styles.showAllText}>Show {trimmed} more strikes</Text>
+        </Pressable>
       )}
+
+      {/*
+        A sheet rather than a panel below the ladder.
+
+        The ladder runs to forty rows even trimmed, so a panel underneath it is
+        a long scroll away from the strike you just tapped — and scrolling back
+        up to compare the next one loses your place. The sheet puts the answer
+        where the question was asked and returns the ladder untouched.
+      */}
+      <Modal
+        visible={detailOpen && selected !== null}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setDetailOpen(false)}
+      >
+        <View style={styles.sheet}>
+          <View style={styles.sheetHead}>
+            <Text style={styles.sheetTitle}>Contract</Text>
+            <Pressable
+              onPress={() => setDetailOpen(false)}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
+              <Text style={styles.sheetClose}>Done</Text>
+            </Pressable>
+          </View>
+          <ScrollView>
+            {selected && spot !== null && target !== null && (
+              <ContractDetail contract={selected} underlyingPrice={spot} targetPrice={target} />
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -448,5 +544,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     textAlign: 'center',
   },
-  error: { color: colors.rose, fontSize: 13, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
+  sheet: { flex: 1, backgroundColor: colors.void },
+  sheetHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSubtle,
+  },
+  sheetTitle: { color: colors.textPrimary, fontSize: 16, fontWeight: '600' },
+  sheetClose: { color: colors.accentBright, fontSize: 15, fontWeight: '600' },
+
+  showAll: { alignSelf: 'center', paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
+  showAllText: { color: colors.accentBright, fontSize: 12, fontWeight: '600' },
+  staleBanner: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.sm,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.amber,
+    backgroundColor: 'rgba(245,158,11,0.08)',
+  },
+  staleText: { color: colors.amber, fontSize: 11, lineHeight: 16 },
+  errorBlock: { paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, gap: spacing.md },
+  error: { color: colors.rose, fontSize: 13, lineHeight: 18 },
+  retry: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    backgroundColor: colors.surface,
+  },
+  retryText: { color: colors.textPrimary, fontSize: 13, fontWeight: '600' },
 });
