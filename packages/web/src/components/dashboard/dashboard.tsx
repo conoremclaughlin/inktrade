@@ -12,6 +12,7 @@ import {
 } from '@inktrade/client';
 import { Navbar } from '@/components/navbar';
 import { AssignmentBanner } from '@/components/trade/assignment-banner';
+import { MacroStrip } from '@/components/dashboard/macro-strip';
 import {
   useBrokerQuotes,
   useBrokerWatchlist,
@@ -66,6 +67,12 @@ export function Dashboard() {
             <NotLinked />
           ) : (
             <>
+              {/*
+                The weather, above your own numbers: a red portfolio on a red
+                tape is a different morning from a red portfolio on a green one.
+              */}
+              <MacroStrip />
+
               <AccountOverview
                 totalValue={summary?.totalValue ?? 0}
                 dayChange={summary?.dayChange ?? 0}
