@@ -44,9 +44,19 @@ export function formatPercent(n: number): string {
   return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 }
 
+/**
+ * Large numbers at a glance — volume, open interest, assets under management.
+ *
+ * Runs to trillions rather than stopping at millions. It was written for
+ * volume, where millions is a natural ceiling, and a fund's AUM then rendered
+ * as "32831.2M" — technically correct and unreadable, which for a figure whose
+ * only job is to be read at a glance is the same as wrong.
+ */
 export function formatCompact(n: number): string {
   if (!Number.isFinite(n)) return '—';
   const abs = Math.abs(n);
+  if (abs >= 1_000_000_000_000) return `${(n / 1_000_000_000_000).toFixed(1)}T`;
+  if (abs >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
   if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
   return String(Math.round(n));

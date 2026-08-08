@@ -95,10 +95,19 @@ export function PortfolioChart({ points, height = 160, onScrub, placeholder }: P
   const responder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        // Claim the gesture so a horizontal drag scrubs instead of scrolling
-        // the page underneath.
+        /*
+         * Claim horizontal drags, and only those.
+         *
+         * This used to claim on touch-down and on any movement, which made the
+         * chart a dead zone for the page scroll — a finger dragged up over the
+         * chart moved nothing, on the screen the app opens to. Comparing
+         * against dy means a vertical drag falls through to the ScrollView and
+         * a horizontal one still scrubs.
+         */
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_e, g) =>
+          Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 4,
+        // Once scrubbing, don't hand the gesture back mid-drag.
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: (e) => locate(e.nativeEvent.locationX),
         onPanResponderMove: (e) => locate(e.nativeEvent.locationX),
