@@ -20,6 +20,7 @@ import {
   type IndicatorId,
   type OscillatorId,
 } from '@inktrade/client';
+import { lookupLetf } from '@inktrade/engine/letf';
 import type { RootStackParamList } from '../navigation';
 import { api } from '../lib/api';
 import { CandlestickChart, type ChartMode } from '../components/CandlestickChart';
@@ -82,6 +83,10 @@ export function StockScreen({ route, navigation }: Props) {
   const toggleIndicator = (id: IndicatorId) =>
     setActive((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
 
+  // Synchronous — the registry is bundled, so the banner is either there on
+  // the first frame or never. No flash of a leveraged warning appearing late.
+  const letf = lookupLetf(symbol);
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
@@ -115,6 +120,34 @@ export function StockScreen({ route, navigation }: Props) {
           <Text style={[styles.actionText, styles.actionPrimaryText]}>Trade {symbol}</Text>
         </Pressable>
       </View>
+
+      {/*
+        Only for the funds it applies to.
+
+        A leveraged ETF looks like any other ticker on this screen — same
+        candles, same indicators — and nothing about the chart says that
+        holding it for a month is a different proposition from holding the
+        index. This is where that gets said, next to the buy button rather
+        than buried in a tab.
+      */}
+      {letf && (
+        <Pressable
+          onPress={() => navigation.navigate('Letf', { symbol })}
+          style={({ pressed }) => [styles.letfBanner, pressed && styles.pressed]}
+          accessibilityRole="button"
+        >
+          <View style={styles.letfCopy}>
+            <Text style={styles.letfTitle}>
+              {Math.abs(letf.leverageFactor)}× {letf.underlyingIndex}, reset daily
+            </Text>
+            <Text style={styles.letfSub}>
+              Held longer than a day this tracks something other than{' '}
+              {Math.abs(letf.leverageFactor)}× {letf.underlyingTicker}. See what that costs.
+            </Text>
+          </View>
+          <Text style={styles.letfChevron}>›</Text>
+        </Pressable>
+      )}
 
       <Chips
         options={HISTORY_PERIODS.map((p) => ({ id: p.value, label: p.label }))}
@@ -318,6 +351,23 @@ const styles = StyleSheet.create({
   actionText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
   actionPrimaryText: { color: colors.accentBright },
   pressed: { opacity: 0.7 },
+
+  letfBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.amber,
+    backgroundColor: 'rgba(245,158,11,0.08)',
+  },
+  letfCopy: { flex: 1, gap: 2 },
+  letfTitle: { color: colors.amber, fontSize: 13, fontWeight: '600' },
+  letfSub: { color: colors.textSecondary, fontSize: 11, lineHeight: 15 },
+  letfChevron: { color: colors.amber, fontSize: 20 },
 
   container: { flex: 1, backgroundColor: colors.void },
   content: { paddingBottom: spacing.xxl },

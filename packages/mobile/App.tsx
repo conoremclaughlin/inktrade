@@ -16,6 +16,7 @@ import { TradeScreen } from './src/screens/TradeScreen';
 import { ChainScreen } from './src/screens/ChainScreen';
 import { CalculatorScreen } from './src/screens/CalculatorScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { LetfScreen } from './src/screens/LetfScreen';
 import {
   CalculatorIcon,
   ChainIcon,
@@ -145,6 +146,11 @@ export default function App() {
               name="Stock"
               component={StockScreen}
               options={({ route }) => ({ title: route.params.symbol })}
+            />
+            <Stack.Screen
+              name="Letf"
+              component={LetfScreen}
+              options={{ title: 'LETF analysis' }}
             />
             <Stack.Screen name="Settings" component={SettingsScreen} />
           </Stack.Navigator>

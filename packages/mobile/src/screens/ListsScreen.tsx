@@ -72,6 +72,28 @@ export function ListsScreen() {
         </Text>
       )}
 
+      {/*
+        The one unconditional door to the LETF screen.
+
+        It's otherwise reached from a leveraged ticker's Stock screen, which
+        means it doesn't exist at all for anyone who neither holds nor watches
+        one — and those are exactly the people still deciding whether to buy.
+        The screen carries its own symbol input, so a single entry is enough.
+      */}
+      <Pressable
+        onPress={() => navigation.navigate('Letf', {})}
+        style={({ pressed }) => [styles.tool, pressed && { opacity: 0.7 }]}
+        accessibilityRole="button"
+      >
+        <View style={styles.toolCopy}>
+          <Text style={styles.toolTitle}>Leveraged ETF analysis</Text>
+          <Text style={styles.toolSub}>
+            What a 3× fund actually returned, and what the daily reset cost
+          </Text>
+        </View>
+        <Text style={styles.toolChevron}>›</Text>
+      </Pressable>
+
       {lists.map((list) => (
         <ListSection
           key={list.id}
@@ -221,4 +243,21 @@ const styles = StyleSheet.create({
   },
   errorText: { color: colors.rose, fontSize: 12, fontWeight: '600' },
   errorHint: { color: colors.textTertiary, fontSize: 11, lineHeight: 15 },
+
+  tool: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderDefault,
+  },
+  toolCopy: { flex: 1, gap: 2 },
+  toolTitle: { color: colors.textPrimary, fontSize: 13, fontWeight: '600' },
+  toolSub: { color: colors.textTertiary, fontSize: 11, lineHeight: 15 },
+  toolChevron: { color: colors.textTertiary, fontSize: 20 },
 });
