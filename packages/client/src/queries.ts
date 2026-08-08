@@ -2,6 +2,7 @@ import type { ApiClient } from './client.js';
 import type { HistoryPeriod } from './types.js';
 import type { OptionChain } from './broker/types.js';
 import type { ChainGridQuery } from './analytics.js';
+import type { LetfPeriod } from './letf.js';
 
 /** Upstream quote batch limit — chunk sizing must match it. */
 export const OPTION_QUOTE_BATCH = 20;
@@ -21,6 +22,9 @@ export const queryKeys = {
   watchlist: () => ['watchlist'] as const,
   chainGrid: (symbol: string, query?: ChainGridQuery) =>
     ['chain-grid', symbol, query?.type ?? 'call', query?.offset ?? 0, query?.limit ?? 6] as const,
+  letfProfile: (symbol: string) => ['letf-profile', symbol] as const,
+  letfHoldings: (symbol: string) => ['letf-holdings', symbol] as const,
+  letfHistory: (symbol: string, period: LetfPeriod) => ['letf-history', symbol, period] as const,
 };
 
 /** Quotes move constantly; refetch on an interval but keep them briefly fresh. */
@@ -81,6 +85,48 @@ export function chainGridQuery(
     staleTime: CHAIN_GRID_STALE_MS,
     // Keep the previous window on screen while the next one loads. Paging
     // expirations otherwise blanks the grid on every step.
+    placeholderData: <T,>(prev: T) => prev,
+  };
+}
+
+/**
+ * A fund's registry entry, expense ratio and holdings are close to static, and
+ * its daily-bar history only changes after the close. Nothing here justifies
+ * an interval — the price on the profile is the one number that moves, and a
+ * stale quote on a decay screen misleads nobody.
+ */
+export const LETF_STALE_MS = 5 * 60_000;
+
+export function letfProfileQuery(api: ApiClient, symbol: string | null) {
+  return {
+    queryKey: queryKeys.letfProfile(symbol ?? ''),
+    queryFn: () => api.getLetfProfile(symbol!),
+    enabled: !!symbol,
+    staleTime: LETF_STALE_MS,
+    // A symbol outside the registry 404s, and retrying can't add it.
+    retry: false,
+  };
+}
+
+export function letfHoldingsQuery(api: ApiClient, symbol: string | null) {
+  return {
+    queryKey: queryKeys.letfHoldings(symbol ?? ''),
+    queryFn: () => api.getLetfHoldings(symbol!),
+    enabled: !!symbol,
+    staleTime: LETF_STALE_MS,
+    retry: false,
+  };
+}
+
+export function letfHistoryQuery(api: ApiClient, symbol: string | null, period: LetfPeriod) {
+  return {
+    queryKey: queryKeys.letfHistory(symbol ?? '', period),
+    queryFn: () => api.getLetfHistory(symbol!, period),
+    enabled: !!symbol,
+    staleTime: LETF_STALE_MS,
+    retry: false,
+    // Hold the drawn curve while a new period loads, so switching 1Y -> 5Y
+    // redraws rather than blanking.
     placeholderData: <T,>(prev: T) => prev,
   };
 }

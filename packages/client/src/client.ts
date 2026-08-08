@@ -17,6 +17,12 @@ import type {
   PortfolioSummary,
 } from './broker/types.js';
 import type { ChainGridQuery, ChainGridResponse } from './analytics.js';
+import type {
+  LetfHistoryResponse,
+  LetfHoldingsResponse,
+  LetfPeriod,
+  LetfProfileResponse,
+} from './letf.js';
 import type { CostBasisDecision, CostBasisStrategy, SalePlan, TaxLot } from './tax-lots.js';
 import type { OversoldCandidate } from './indicators.js';
 import type { TradingMode, TradingModeDecision } from './trading-mode.js';
@@ -76,6 +82,16 @@ export interface ApiClient {
   getTickerHistory(symbol: string, period: HistoryPeriod): Promise<TickerHistoryResponse>;
   getOIDistribution(symbol: string, expiry?: string): Promise<OIDistributionResponse>;
   getChainGrid(symbol: string, query?: ChainGridQuery): Promise<ChainGridResponse>;
+
+  // --- Leveraged ETFs ---------------------------------------------------
+  //
+  // Three calls rather than one because they age differently: the registry and
+  // fund profile barely move, holdings turn over quarterly, and the history is
+  // the only one that changes with the period control.
+  getLetfProfile(symbol: string): Promise<LetfProfileResponse>;
+  getLetfHoldings(symbol: string): Promise<LetfHoldingsResponse>;
+  getLetfHistory(symbol: string, period: LetfPeriod): Promise<LetfHistoryResponse>;
+
   getWatchlist(): Promise<WatchlistResponse>;
   putWatchlist(symbols: string[]): Promise<WatchlistResponse>;
 
@@ -227,6 +243,24 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       if (query?.offset != null) params.set('offset', String(query.offset));
       if (query?.limit != null) params.set('limit', String(query.limit));
       return request<ChainGridResponse>(`/api/chain-grid?${params}`);
+    },
+
+    getLetfProfile(symbol) {
+      return request<LetfProfileResponse>(
+        `/api/letf/profile?symbol=${encodeURIComponent(symbol)}`,
+      );
+    },
+
+    getLetfHoldings(symbol) {
+      return request<LetfHoldingsResponse>(
+        `/api/letf/holdings?symbol=${encodeURIComponent(symbol)}`,
+      );
+    },
+
+    getLetfHistory(symbol, period) {
+      return request<LetfHistoryResponse>(
+        `/api/letf/history?symbol=${encodeURIComponent(symbol)}&period=${period}`,
+      );
     },
 
     getWatchlist() {
