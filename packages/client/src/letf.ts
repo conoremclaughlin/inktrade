@@ -146,25 +146,37 @@ export interface RealizedLeverage {
  * number and very different amounts of money.
  */
 export function realizedLeverage(history: LetfHistoryResponse): RealizedLeverage {
-  const stated = history.leverageFactor;
-  const underlying = history.totalUnderlyingReturn;
-  const letf = history.totalLetfReturn;
+  return realizedLeverageAt(
+    history.totalLetfReturn,
+    history.totalUnderlyingReturn,
+    history.leverageFactor,
+    history.totalDivergence,
+  );
+}
 
-  if (Math.abs(underlying) < MIN_MEANINGFUL_MOVE_PCT) {
-    return {
-      stated,
-      realized: null,
-      divergence: history.totalDivergence,
-      degenerate: true,
-      inverted: false,
-    };
+/**
+ * The same measure at an arbitrary point on the curve.
+ *
+ * Split out so scrubbing the chart can move the headline with everything else.
+ * Reading a date in the label while the multiple above it still described the
+ * whole window put two different periods on screen under one heading — and the
+ * one in the biggest type was the one not being pointed at.
+ */
+export function realizedLeverageAt(
+  letfReturn: number,
+  underlyingReturn: number,
+  stated: number,
+  divergence: number,
+): RealizedLeverage {
+  if (Math.abs(underlyingReturn) < MIN_MEANINGFUL_MOVE_PCT) {
+    return { stated, realized: null, divergence, degenerate: true, inverted: false };
   }
 
-  const realized = letf / underlying;
+  const realized = letfReturn / underlyingReturn;
   return {
     stated,
     realized,
-    divergence: history.totalDivergence,
+    divergence,
     degenerate: false,
     // Opposite signs mean the fund went the way it was built not to. Rare, and
     // worth saying out loud rather than rendering as a negative multiple the

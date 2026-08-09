@@ -16,6 +16,7 @@ import {
   letfHoldingsQuery,
   letfProfileQuery,
   realizedLeverage,
+  realizedLeverageAt,
   LETF_PERIODS,
   type LetfPeriod,
 } from '@inktrade/client';
@@ -72,7 +73,24 @@ export function LetfScreen({ route }: Props) {
   const registry = useMemo(() => lookupLetf(symbol), [symbol]);
   const leverageFactor = registry?.leverageFactor ?? profile.data?.registry.leverageFactor ?? 3;
 
-  const realized = history.data ? realizedLeverage(history.data) : null;
+  /*
+   * The headline follows the crosshair.
+   *
+   * Scrubbing swaps the label to "AS OF <date>" and moves the three return
+   * figures with it, so a multiple that stayed pinned to the whole window put
+   * two different periods under one heading — with the mismatched one in the
+   * largest type on the screen.
+   */
+  const realized = history.data
+    ? scrub
+      ? realizedLeverageAt(
+          scrub.point.letfCumReturn,
+          scrub.point.underlyingCumReturn,
+          history.data.leverageFactor,
+          scrub.point.divergence,
+        )
+      : realizedLeverage(history.data)
+    : null;
 
   const commitSymbol = () => {
     const next = draft.trim().toUpperCase();
@@ -163,8 +181,14 @@ export function LetfScreen({ route }: Props) {
 
           {realized.degenerate ? (
             <Text style={styles.headlineDegenerate}>
-              The index barely moved over this window, so there is no meaningful
-              multiple to quote. Try a longer period.
+              {/*
+                Scrubbing near the left edge lands here legitimately — a few
+                days in, nothing has moved yet. Telling someone to pick a
+                longer period would be answering a question they didn't ask.
+              */}
+              {scrub
+                ? `${history.data.underlying} had barely moved by this date, so there is no multiple to quote yet.`
+                : `The index barely moved over this window, so there is no meaningful multiple to quote. Try a longer period.`}
             </Text>
           ) : (
             <View style={styles.headlineRow}>
@@ -197,7 +221,7 @@ export function LetfScreen({ route }: Props) {
 
           <Text style={styles.divergence}>
             {(() => {
-              const gap = scrub ? scrub.point.divergence : history.data.totalDivergence;
+              const gap = realized.divergence;
               if (realized.inverted) {
                 return `${history.data.symbol} fell while ${history.data.underlying} rose — this fund did not track its index at all over this window.`;
               }

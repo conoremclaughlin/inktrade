@@ -3,6 +3,7 @@ import {
   describeLetf,
   humanizeSector,
   realizedLeverage,
+  realizedLeverageAt,
   sectorEntries,
   type LetfHistoryResponse,
   type LetfRegistryWire,
@@ -141,6 +142,30 @@ describe('realizedLeverage', () => {
     }));
     expect(r.realized).toBeCloseTo(3.4, 5);
     expect(r.inverted).toBe(false);
+  });
+});
+
+describe('realizedLeverageAt', () => {
+  it('measures a point on the curve, not the whole window', () => {
+    // The mismatch found by scrubbing TQQQ's 1Y chart: the window realized
+    // 2.50x, but on 2025-10-10 it stood at 2.44x. The headline read the window
+    // figure under an "AS OF <date>" label — two periods, one heading.
+    const at = realizedLeverageAt(11.0, 4.5, 3, -2.5);
+    expect(at.realized).toBeCloseTo(2.444, 2);
+    expect(at.divergence).toBe(-2.5);
+  });
+
+  it('goes degenerate near the start of a window, where nothing has moved', () => {
+    const at = realizedLeverageAt(0.9, 0.4, 3, -0.3);
+    expect(at.degenerate).toBe(true);
+    expect(at.realized).toBeNull();
+  });
+
+  it('agrees with realizedLeverage when handed the window totals', () => {
+    const h = history();
+    expect(
+      realizedLeverageAt(h.totalLetfReturn, h.totalUnderlyingReturn, h.leverageFactor, h.totalDivergence),
+    ).toEqual(realizedLeverage(h));
   });
 });
 
