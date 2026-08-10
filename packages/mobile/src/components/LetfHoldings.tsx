@@ -6,9 +6,12 @@ import { changeColor, colors, fonts, formatPercent, spacing } from '../ui/theme'
  * What the fund is actually leveraged to.
  *
  * A 3x NASDAQ fund is not a bet on "tech" so much as a bet on eight companies,
- * and the concentration figure is the fastest way to see that. The holdings
- * belong to the *index*, not the fund — the fund itself holds swaps — which is
- * why the weights are the index's and no dollar amounts appear.
+ * and the concentration figure is the fastest way to see that.
+ *
+ * These are the INDEX's holdings, fetched for the underlying ticker rather
+ * than the fund. A swap-based LETF doesn't hold the index at all — it holds
+ * collateral — so asking the provider about the fund returns a money-market
+ * position and some noise, which is not what anyone reading this wants to know.
  */
 
 const MAX_ROWS = 10;
@@ -27,7 +30,15 @@ export function LetfHoldings({ data }: { data: LetfHoldingsResponse }) {
       {data.topConcentration.top5 > 0 && (
         <View style={styles.concentration}>
           <Concentration label="TOP 5" value={data.topConcentration.top5} />
-          <Concentration label="TOP 10" value={data.topConcentration.top10} />
+          {/*
+            Both figures are the same number when the provider returns five
+            names or fewer, and printing "TOP 5 24.2% · TOP 10 24.2%" reads as
+            a coincidence worth investigating rather than as an artefact of
+            there being nothing else in the list.
+          */}
+          {data.holdings.length > 5 && (
+            <Concentration label="TOP 10" value={data.topConcentration.top10} />
+          )}
         </View>
       )}
 
