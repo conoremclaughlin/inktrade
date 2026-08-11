@@ -12,10 +12,17 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import type { OptionContract } from '@inktrade/client';
+import {
+  countdownLabel,
+  daysUntil,
+  earningsBeforeExpiration,
+  timingLabel,
+  type OptionContract,
+} from '@inktrade/client';
 import { useChainQuotes } from '@inktrade/client/hooks';
 import type { TabParamList } from '../navigation';
 import { useOptionChain } from '../hooks/useTrading';
+import { useEarnings } from '../hooks/useEarnings';
 import { api } from '../lib/api';
 import { colors, fonts, formatMoney, radii, spacing } from '../ui/theme';
 
@@ -99,6 +106,13 @@ export function ChainScreen() {
 
   const spot = chain.data?.underlyingPrice ?? null;
   const selectedRow = rows.find((r) => r.strike === openStrike);
+
+  const { data: earningsData } = useEarnings([symbol]);
+  const earningsAsOf = earningsData?.asOf ?? '';
+  const earnings = earningsData?.earnings.find((e) => e.symbol === symbol) ?? null;
+  const selectedSpansEarnings =
+    chain.data != null &&
+    earningsBeforeExpiration(earnings, chain.data.expiration, earningsAsOf) === true;
 
   /**
    * Open at the money.
@@ -186,14 +200,22 @@ export function ChainScreen() {
         >
           {chain.data.expirations.map((exp) => {
             const on = exp === chain.data!.expiration;
+            // Marked when the contract has to live through a report. That line
+            // through the ladder is the most useful thing here for a seller:
+            // everything past it is priced for a gap.
+            const spans = earningsBeforeExpiration(earnings, exp, earningsAsOf) === true;
             return (
               <Pressable
                 key={exp}
                 onPress={() => setExpiration(exp)}
                 style={[styles.expiration, on && styles.expirationOn]}
+                accessibilityLabel={
+                  spans ? `${shortDate(exp)}, holds through earnings` : shortDate(exp)
+                }
               >
                 <Text style={[styles.expirationText, on && styles.expirationTextOn]}>
                   {shortDate(exp)}
+                  {spans ? <Text style={styles.earningsMark}> ◆</Text> : null}
                 </Text>
                 <Text style={[styles.expirationDays, on && styles.expirationTextOn]}>
                   {daysTo(exp)}
@@ -202,6 +224,14 @@ export function ChainScreen() {
             );
           })}
         </ScrollView>
+      )}
+
+      {selectedSpansEarnings && earnings && (
+        <Text style={styles.earningsWarning}>
+          ◆ {symbol} reports {countdownLabel(daysUntil(earnings.date, earningsAsOf))}
+          {timingLabel(earnings.timing) ? ` ${timingLabel(earnings.timing)}` : ''}
+          {earnings.isEstimate ? ' (estimated)' : ''} — these contracts have to live through it.
+        </Text>
       )}
 
       <View style={styles.headerRow}>
@@ -505,6 +535,13 @@ const styles = StyleSheet.create({
   expirationText: { color: colors.textSecondary, fontFamily: fonts.mono, fontSize: 12 },
   expirationDays: { color: colors.textMuted, fontFamily: fonts.mono, fontSize: 9, marginTop: 1 },
   expirationTextOn: { color: colors.accentBright },
+  earningsMark: { color: colors.amber },
+  earningsWarning: {
+    color: colors.amber,
+    fontSize: 11,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
 
   headerRow: {
     flexDirection: 'row',

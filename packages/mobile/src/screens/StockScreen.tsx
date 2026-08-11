@@ -30,7 +30,9 @@ import { VolumePane } from '../components/VolumePane';
 import { PeriodLevels } from '../components/PeriodLevels';
 import { SwingLevels } from '../components/SwingLevels';
 import { OrderActivityList } from '../components/OrderActivityList';
+import { EarningsLine } from '../components/EarningsBadge';
 import { useOrderActivity } from '../hooks/useTrading';
+import { useEarnings } from '../hooks/useEarnings';
 import { changeColor, colors, fonts, formatPercent, formatPrice, radii, spacing } from '../ui/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stock'>;
@@ -87,6 +89,9 @@ export function StockScreen({ route, navigation }: Props) {
   // the first frame or never. No flash of a leveraged warning appearing late.
   const letf = lookupLetf(symbol);
 
+  const { data: earningsData } = useEarnings([symbol]);
+  const earnings = earningsData?.earnings.find((e) => e.symbol === symbol) ?? null;
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
@@ -100,6 +105,13 @@ export function StockScreen({ route, navigation }: Props) {
           </View>
         )}
       </View>
+
+      {/*
+        Before the actions, not after: whether a report lands inside the trade
+        changes which action you want, so it has to be readable before you pick
+        one. Renders nothing when the date is past the horizon.
+      */}
+      <EarningsLine earnings={earnings} asOf={earningsData?.asOf ?? ''} />
 
       {/*
         A ticker screen with no way to act on the ticker is a dead end — you

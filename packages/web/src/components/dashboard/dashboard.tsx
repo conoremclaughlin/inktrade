@@ -13,6 +13,7 @@ import {
 import { Navbar } from '@/components/navbar';
 import { AssignmentBanner } from '@/components/trade/assignment-banner';
 import { MacroStrip } from '@/components/dashboard/macro-strip';
+import { EarningsAhead } from '@/components/dashboard/earnings-ahead';
 import {
   useBrokerQuotes,
   useBrokerWatchlist,
@@ -90,6 +91,13 @@ export function Dashboard() {
                 positions={positions}
                 broker={brokerIdOf(portfolio.data?.provider)}
               />
+
+              {/*
+                Below assignment, above everything else: assignment has a
+                same-day deadline, earnings has a dated one. Both outrank
+                browsing.
+              */}
+              <EarningsAhead positions={positions} onSymbolClick={goToSymbol} />
 
               <section>
                 <SectionHeader title="Watchlists" count={lists.length} />

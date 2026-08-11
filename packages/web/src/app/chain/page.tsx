@@ -2,9 +2,16 @@
 
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import {
+  countdownLabel,
+  daysUntil,
+  earningsBeforeExpiration,
+  timingLabel,
+  type EarningsDate,
+} from '@inktrade/client';
 import { AppShell } from '@/components/app-shell';
 import { OptionChainTable } from '@/components/chain/option-chain-table';
-import { useOptionChain } from '@/lib/broker-hooks';
+import { useEarnings, useOptionChain } from '@/lib/broker-hooks';
 
 /**
  * useSearchParams opts its subtree out of prerendering, so the page body sits
@@ -21,6 +28,8 @@ function ChainContent() {
   );
 
   const { data, isLoading, isFetching, error } = useOptionChain(symbol, expiration);
+  const { data: earningsData } = useEarnings([symbol]);
+  const earnings = earningsData?.earnings.find((e) => e.symbol === symbol) ?? null;
 
   const selectSymbol = (next: string) => {
     const upper = next.trim().toUpperCase();
@@ -91,6 +100,8 @@ function ChainContent() {
                 expirations={data.expirations}
                 selected={data.expiration}
                 onSelect={setExpiration}
+                earnings={earnings}
+                asOf={earningsData?.asOf ?? ''}
               />
             )}
           </div>
@@ -135,37 +146,65 @@ function ChainContent() {
  * Horizontal and scrollable rather than a select, because the gap between
  * expiries is information — weeklies bunched at the front, then monthlies,
  * then LEAPS — and a dropdown flattens that into an undifferentiated list.
+ *
+ * Expirations that hold through an earnings report are marked. That line
+ * through the ladder is the single most useful thing on the screen for anyone
+ * selling premium: the contracts on its far side are priced for a gap, and the
+ * ones on the near side aren't.
  */
 function ExpirationLadder({
   expirations,
   selected,
   onSelect,
+  earnings,
+  asOf,
 }: {
   expirations: string[];
   selected: string;
   onSelect: (expiration: string) => void;
+  earnings: EarningsDate | null;
+  asOf: string;
 }) {
+  const selectedSpans = earningsBeforeExpiration(earnings, selected, asOf);
+
   return (
     <div className="mt-4">
       <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-text-tertiary mb-2">
         Expiration
       </label>
       <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {expirations.map((date) => (
-          <button
-            key={date}
-            onClick={() => onSelect(date)}
-            className={`px-3 py-1.5 rounded-lg text-[11px] font-mono font-medium whitespace-nowrap transition-all border ${
-              date === selected
-                ? 'bg-accent/15 text-accent-bright border-accent/30'
-                : 'border-border-subtle text-text-muted hover:text-text-secondary'
-            }`}
-          >
-            {formatExpiration(date)}
-            <span className="ml-1.5 text-text-tertiary">{daysToExpiry(date)}d</span>
-          </button>
-        ))}
+        {expirations.map((date) => {
+          const spans = earningsBeforeExpiration(earnings, date, asOf) === true;
+          return (
+            <button
+              key={date}
+              onClick={() => onSelect(date)}
+              title={spans ? `Holds through earnings on ${earnings!.date}` : undefined}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-mono font-medium whitespace-nowrap transition-all border ${
+                date === selected
+                  ? 'bg-accent/15 text-accent-bright border-accent/30'
+                  : 'border-border-subtle text-text-muted hover:text-text-secondary'
+              }`}
+            >
+              {formatExpiration(date)}
+              <span className="ml-1.5 text-text-tertiary">{daysToExpiry(date)}d</span>
+              {spans && (
+                <span aria-hidden className="ml-1 text-amber">
+                  ◆
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
+
+      {selectedSpans && earnings && (
+        <p className="mt-2 text-[11px] text-amber">
+          ◆ {earnings.symbol} reports {countdownLabel(daysUntil(earnings.date, asOf))}
+          {timingLabel(earnings.timing) && ` ${timingLabel(earnings.timing)}`}
+          {earnings.isEstimate && ' (estimated)'} — these contracts have to live through it.
+        </p>
+      )}
     </div>
   );
 }

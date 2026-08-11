@@ -25,6 +25,7 @@ export const queryKeys = {
   letfProfile: (symbol: string) => ['letf-profile', symbol] as const,
   letfHoldings: (symbol: string) => ['letf-holdings', symbol] as const,
   letfHistory: (symbol: string, period: LetfPeriod) => ['letf-history', symbol, period] as const,
+  earnings: (symbols: string[]) => ['earnings', [...symbols].sort().join(',')] as const,
 };
 
 /** Quotes move constantly; refetch on an interval but keep them briefly fresh. */
@@ -40,6 +41,24 @@ export function quotesQuery(api: ApiClient, symbols: string[]) {
     enabled: symbols.length > 0,
     staleTime: QUOTES_STALE_MS,
     refetchInterval: QUOTES_REFETCH_MS,
+  };
+}
+
+/**
+ * Earnings dates barely move — a company announces one and it stands for
+ * weeks. Refetching on focus would spend a request to learn nothing.
+ */
+export const EARNINGS_STALE_MS = 60 * 60_000;
+
+export function earningsQuery(api: ApiClient, symbols: string[]) {
+  return {
+    queryKey: queryKeys.earnings(symbols),
+    queryFn: () => api.getEarnings(symbols),
+    enabled: symbols.length > 0,
+    staleTime: EARNINGS_STALE_MS,
+    // A missing badge is a smaller failure than a broken page. Every consumer
+    // renders nothing when this query has no data.
+    retry: 1,
   };
 }
 

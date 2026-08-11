@@ -9,7 +9,9 @@ import { OrderActivityPanel } from '@/components/stock/order-activity';
 import { LevelsPanel } from '@/components/stock/levels-panel';
 import { OscillatorPanel } from '@/components/stock/oscillator-panel';
 import { ThetaDecayChart } from '@/components/stock/theta-decay-chart';
+import { EarningsLine } from '@/components/earnings-badge';
 import { useQuote, useTickerHistory } from '@/lib/hooks';
+import { useEarnings } from '@/lib/broker-hooks';
 
 const PERIODS = ['1M', '3M', '6M', '1Y', '2Y', '5Y'] as const;
 const PERIOD_MAP: Record<string, string> = {
@@ -58,6 +60,8 @@ function StockContent() {
 
   const quote = useQuote(symbol);
   const history = useTickerHistory(symbol, PERIOD_MAP[period] ?? '1y');
+  const { data: earningsData } = useEarnings([symbol]);
+  const earnings = earningsData?.earnings.find((e) => e.symbol === symbol) ?? null;
 
   const handleSubmit = (s?: string) => {
     const val = (s ?? input).trim().toUpperCase();
@@ -125,6 +129,15 @@ function StockContent() {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/*
+              Next report, on the symbol's own page. Renders nothing when the
+              date is more than two months out or the symbol has none — an ETF
+              shouldn't carry an empty earnings row.
+            */}
+            <div className="mt-4">
+              <EarningsLine earnings={earnings} asOf={earningsData?.asOf ?? ''} />
             </div>
 
             {/* Quick picks */}

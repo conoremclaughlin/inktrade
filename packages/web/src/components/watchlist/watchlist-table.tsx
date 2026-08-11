@@ -3,7 +3,9 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { Quote } from '@inktrade/engine/math';
 import { useWatchlistSymbols, useWatchlistQuotes } from '@/lib/hooks';
+import { useEarnings } from '@/lib/broker-hooks';
 import { useUser } from '@/lib/hooks/use-auth';
+import { EarningsBadge } from '@/components/earnings-badge';
 
 type SortKey = 'symbol' | 'price' | 'change' | 'changePct' | 'volume' | 'marketCap' | 'dayRange';
 type SortDir = 'asc' | 'desc';
@@ -63,6 +65,11 @@ export function WatchlistTable() {
   const { isAuthenticated, isLoading: authLoading } = useUser();
   const { symbols, addSymbol, removeSymbol, moveSymbol } = useWatchlistSymbols();
   const { data, isLoading, error } = useWatchlistQuotes(symbols);
+  const { data: earningsData } = useEarnings(symbols);
+  const earningsMap = useMemo(
+    () => new Map((earningsData?.earnings ?? []).map((e) => [e.symbol, e])),
+    [earningsData],
+  );
   const [sortKey, setSortKey] = useState<SortKey>('symbol');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [addInput, setAddInput] = useState('');
@@ -315,6 +322,15 @@ export function WatchlistTable() {
                       <span className="text-[13px] font-mono font-semibold text-text-primary">
                         {sym}
                       </span>
+                      {/*
+                        In the symbol cell rather than its own column: only a
+                        few rows ever carry one, and an empty column of dashes
+                        would cost every row width to say nothing.
+                      */}
+                      <EarningsBadge
+                        earnings={earningsMap.get(sym)}
+                        asOf={earningsData?.asOf ?? ''}
+                      />
                     </div>
                   </td>
 

@@ -153,6 +153,60 @@ describe('findPutCreditSpread', () => {
   });
 });
 
+describe('findPutCreditSpread with earnings', () => {
+  const ladder = () => chain([put(95, 2.0, 1.9, 2.1), put(100, 4.0, 3.9, 4.1)], 100);
+  const report = (date: string, isEstimate = false) => ({
+    symbol: 'TEST',
+    date,
+    timestamp: `${date}T20:00:00.000Z`,
+    timing: 'after-close' as const,
+    isEstimate,
+    windowEnd: null,
+  });
+
+  it('flags a report the spread has to live through', () => {
+    // The chain expires 2026-09-18; the report lands eleven days before it.
+    const s = findPutCreditSpread(ladder(), {
+      targetWidth: 5,
+      earnings: report('2026-09-07'),
+      asOf: '2026-08-10',
+    });
+    expect(s!.earnings).toEqual({ date: '2026-09-07', isEstimate: false });
+  });
+
+  it('leaves the flag off when the report lands after expiry', () => {
+    const s = findPutCreditSpread(ladder(), {
+      targetWidth: 5,
+      earnings: report('2026-10-28'),
+      asOf: '2026-08-10',
+    });
+    expect(s!.earnings).toBeNull();
+  });
+
+  it('keeps the estimate marker, because a guessed date is a weaker warning', () => {
+    const s = findPutCreditSpread(ladder(), {
+      targetWidth: 5,
+      earnings: report('2026-09-07', true),
+      asOf: '2026-08-10',
+    });
+    expect(s!.earnings!.isEstimate).toBe(true);
+  });
+
+  it('does not change the ranking metric', () => {
+    // An earnings spread pays more because it is more dangerous. Demoting it
+    // would hide the trade rather than describe it — the flag annotates, the
+    // credit still ranks.
+    const withReport = findPutCreditSpread(ladder(), {
+      targetWidth: 5,
+      earnings: report('2026-09-07'),
+      asOf: '2026-08-10',
+    })!;
+    const without = findPutCreditSpread(ladder(), { targetWidth: 5 })!;
+    expect(withReport.creditPerRiskReal).toBe(without.creditPerRiskReal);
+    expect(without.earnings).toBeNull();
+  });
+});
+
 describe('perRisk', () => {
   it('scales credit to the collateral it ties up', () => {
     expect(perRisk(2, 5, 500)).toBeCloseTo(333.33, 1);

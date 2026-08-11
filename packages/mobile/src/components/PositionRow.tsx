@@ -1,9 +1,17 @@
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { changeColor, colors, fonts, formatPercent, formatPrice, spacing } from '../ui/theme';
 
 interface Props {
   /** Ticker, or a readable contract label for options. */
   symbol: string;
+  /**
+   * Marker pinned beside the ticker — an earnings date, say.
+   *
+   * A slot rather than a prop per marker: the row shouldn't have to know what
+   * kinds of warning exist, and the next one shouldn't need this file edited.
+   */
+  badge?: ReactNode;
   /** Position context — share count and average cost. Omitted for watched-only rows. */
   detail?: string;
   value: number;
@@ -28,6 +36,7 @@ interface Props {
  */
 export function PositionRow({
   symbol,
+  badge,
   detail,
   value,
   changePercent,
@@ -42,7 +51,10 @@ export function PositionRow({
       style={({ pressed }) => [styles.row, pressed && onPress ? styles.pressed : null]}
     >
       <View style={styles.left}>
-        <Text style={styles.symbol} numberOfLines={1}>{symbol}</Text>
+        <View style={styles.symbolLine}>
+          <Text style={styles.symbol} numberOfLines={1}>{symbol}</Text>
+          {badge}
+        </View>
         {detail ? <Text style={styles.detail} numberOfLines={1}>{detail}</Text> : null}
       </View>
       <View style={styles.right}>
@@ -76,6 +88,8 @@ const styles = StyleSheet.create({
   },
   pressed: { backgroundColor: colors.surface },
   left: { flex: 1, minWidth: 0 },
+  // `flexShrink` on the row so a badge never pushes the price off the screen.
+  symbolLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1 },
   right: { alignItems: 'flex-end' },
   symbol: { color: colors.textPrimary, fontFamily: fonts.mono, fontSize: 14, fontWeight: '600' },
   detail: { color: colors.textTertiary, fontSize: 11, marginTop: 2 },

@@ -23,6 +23,7 @@ import type {
   LetfPeriod,
   LetfProfileResponse,
 } from './letf.js';
+import type { EarningsResponse } from './earnings.js';
 import type { CostBasisDecision, CostBasisStrategy, SalePlan, TaxLot } from './tax-lots.js';
 import type { OversoldCandidate } from './indicators.js';
 import type { TradingMode, TradingModeDecision } from './trading-mode.js';
@@ -65,6 +66,15 @@ export class ApiError extends Error {
 
 export interface ApiClient {
   getQuotes(symbols: string[]): Promise<QuotesResponse>;
+
+  /**
+   * Next earnings date for a batch of symbols.
+   *
+   * Batched rather than per-symbol because every caller is a list — a
+   * portfolio, a watchlist, a screener's results. One request for twenty
+   * symbols instead of twenty.
+   */
+  getEarnings(symbols: string[]): Promise<EarningsResponse>;
 
   // --- Linked brokerage -------------------------------------------------
   //
@@ -178,6 +188,15 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     getQuotes(symbols) {
       if (symbols.length === 0) return Promise.resolve({ quotes: [] });
       return request<QuotesResponse>(`/api/quotes?symbols=${symbols.join(',')}`);
+    },
+
+    getEarnings(symbols) {
+      if (symbols.length === 0) {
+        // `asOf` has to be something; an empty result is never rendered, and
+        // the alternative is making every consumer handle a null day.
+        return Promise.resolve({ earnings: [], unknown: [], asOf: '' });
+      }
+      return request<EarningsResponse>(`/api/earnings?symbols=${symbols.join(',')}`);
     },
 
     getBrokerQuotes(symbols) {

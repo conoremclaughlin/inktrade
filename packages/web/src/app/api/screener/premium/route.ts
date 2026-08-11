@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { findPutCreditSpread, rankByRealCredit, type PutCreditSpread } from '@inktrade/client';
+import {
+  findPutCreditSpread,
+  rankByRealCredit,
+  type EarningsDate,
+  type EarningsResponse,
+  type PutCreditSpread,
+} from '@inktrade/client';
 import { robinhoodBroker } from '@/lib/robinhood';
 import { disconnected, brokerError } from '../../broker/shared';
 
@@ -53,6 +59,17 @@ export async function GET(request: NextRequest) {
     const broker = await robinhoodBroker(request.url);
     if (!broker) return disconnected();
 
+    /*
+     * Earnings first, and in parallel with nothing — it is one request for the
+     * whole symbol list, and every spread below needs it.
+     *
+     * A report inside the window does not disqualify a spread. The credit is
+     * fat *because* the report is coming, so filtering those out would delete
+     * the trades the screen exists to find. It marks them instead, and lets
+     * the reader decide whether they are being paid for the gap or by it.
+     */
+    const earnings = await earningsFor(request, symbols);
+
     const priced: PutCreditSpread[] = [];
     /*
      * Named, not silently omitted.
@@ -68,7 +85,13 @@ export async function GET(request: NextRequest) {
     await mapWithConcurrency(symbols, CONCURRENCY, async (symbol) => {
       try {
         const chain = await broker.getOptionChain(symbol, expiration);
-        const spread = findPutCreditSpread(chain, { targetWidth, riskBudget, offsetPercent });
+        const spread = findPutCreditSpread(chain, {
+          targetWidth,
+          riskBudget,
+          offsetPercent,
+          earnings: earnings.bySymbol.get(symbol) ?? null,
+          asOf: earnings.asOf,
+        });
         if (spread) priced.push(spread);
         else skipped.push({ symbol, reason: 'no spread constructible from this chain' });
       } catch (err) {
@@ -83,10 +106,42 @@ export async function GET(request: NextRequest) {
       targetWidth,
       riskBudget,
       offsetPercent,
+      // Named so a reader can tell "no report in the window" from "we never
+      // got the dates" — the two look identical on a row.
+      earningsChecked: earnings.ok,
       spreads: rankByRealCredit(priced),
     });
   } catch (err) {
     return brokerError(err);
+  }
+}
+
+/**
+ * Earnings dates for the scan, via our own batch route.
+ *
+ * Degrades rather than fails. A screener that returns nothing because a
+ * secondary data source was down is worse than one that returns the spreads
+ * and admits it couldn't check the calendar — so a failure here sets
+ * `ok: false` and the response says so out loud.
+ */
+async function earningsFor(
+  request: NextRequest,
+  symbols: string[],
+): Promise<{ bySymbol: Map<string, EarningsDate>; asOf: string; ok: boolean }> {
+  const empty = { bySymbol: new Map<string, EarningsDate>(), asOf: '', ok: false };
+  try {
+    const url = new URL('/api/earnings', request.nextUrl.origin);
+    url.searchParams.set('symbols', symbols.join(','));
+    const res = await fetch(url, { headers: { cookie: request.headers.get('cookie') ?? '' } });
+    if (!res.ok) return empty;
+    const body = (await res.json()) as EarningsResponse;
+    return {
+      bySymbol: new Map(body.earnings.map((e) => [e.symbol, e])),
+      asOf: body.asOf,
+      ok: true,
+    };
+  } catch {
+    return empty;
   }
 }
 

@@ -23,6 +23,7 @@ import { usePortfolio, usePortfolioHistory } from '../hooks/usePortfolio';
 import { PortfolioChart } from '../components/PortfolioChart';
 import { PositionRow } from '../components/PositionRow';
 import { AssignmentBanner } from '../components/AssignmentBanner';
+import { EarningsAhead } from '../components/EarningsAhead';
 import { MacroStrip } from '../components/MacroStrip';
 import { API_BASE_URL } from '../lib/api';
 import { changeColor, colors, fonts, formatPercent, formatPrice, radii, spacing } from '../ui/theme';
@@ -162,6 +163,15 @@ export function PortfolioScreen() {
         the screen with a same-day deadline.
       */}
       <AssignmentBanner positions={positions} broker={brokerIdOf(portfolio.provider)} />
+
+      {/*
+        Below assignment, above the holdings: assignment carries a same-day
+        deadline, earnings a dated one. Both outrank browsing what you own.
+      */}
+      <EarningsAhead
+        positions={positions}
+        onSymbolPress={(symbol) => navigation.navigate('Stock', { symbol })}
+      />
 
       <Section title="Holdings" count={equities.length} />
       {equities.map((p) => (

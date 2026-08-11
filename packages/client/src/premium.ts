@@ -1,4 +1,5 @@
 import type { OptionChain, OptionContract } from './broker/types.js';
+import { earningsBeforeExpiration, type EarningsDate } from './earnings.js';
 
 /**
  * What a put credit spread actually pays, per dollar of collateral.
@@ -52,6 +53,25 @@ export interface PutCreditSpread {
   /** Thin open interest is why a book is wide; carried so the rank can explain itself. */
   shortOpenInterest: number | null;
   longOpenInterest: number | null;
+
+  /**
+   * A report the spread has to survive, when one falls on or before expiry.
+   *
+   * Not folded into the ranking. An earnings spread pays more precisely
+   * because it is more dangerous, so demoting it would hide the trade rather
+   * than describe it — but a fat credit and a report inside the window are the
+   * same fact seen twice, and the table has to say so.
+   *
+   * Null means no report between here and expiry *or* no date known. The
+   * screener distinguishes those in `skipped`; a row alone cannot.
+   */
+  earnings: SpreadEarnings | null;
+}
+
+export interface SpreadEarnings {
+  /** Market calendar day, YYYY-MM-DD. */
+  date: string;
+  isEstimate: boolean;
 }
 
 export interface SpreadSearchOptions {
@@ -63,6 +83,10 @@ export interface SpreadSearchOptions {
    * money; -10 sells a strike 10% below, for more cushion and less credit.
    */
   offsetPercent?: number;
+  /** A known report for this underlying, so the row can flag one inside the window. */
+  earnings?: EarningsDate | null;
+  /** Market calendar day the earnings date is measured against, YYYY-MM-DD. */
+  asOf?: string;
 }
 
 /** Puts only, quotable, sorted ascending by strike. */
@@ -83,7 +107,13 @@ export function findPutCreditSpread(
   chain: OptionChain,
   options: SpreadSearchOptions = {},
 ): PutCreditSpread | null {
-  const { targetWidth = 5, riskBudget = DEFAULT_RISK_BUDGET, offsetPercent = 0 } = options;
+  const {
+    targetWidth = 5,
+    riskBudget = DEFAULT_RISK_BUDGET,
+    offsetPercent = 0,
+    earnings = null,
+    asOf = '',
+  } = options;
 
   const spot = chain.underlyingPrice;
   if (spot === null || spot <= 0) return null;
@@ -137,6 +167,10 @@ export function findPutCreditSpread(
     shortDelta: short.delta ?? null,
     shortOpenInterest: short.openInterest ?? null,
     longOpenInterest: long.openInterest ?? null,
+    earnings:
+      earningsBeforeExpiration(earnings, chain.expiration, asOf) === true
+        ? { date: earnings!.date, isEstimate: earnings!.isEstimate }
+        : null,
   };
 }
 

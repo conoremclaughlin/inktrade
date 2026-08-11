@@ -5,6 +5,7 @@ import {
   brokerQuotesQuery,
   brokerWatchlistQuery,
   brokerWatchlistsQuery,
+  earningsQuery,
   optionChainQuery,
   orderActivityQuery,
   portfolioQuery,
@@ -41,6 +42,18 @@ export function useBrokerWatchlist(id: string | null) {
 /** Live prices for a set of symbols. Idle until there is something to price. */
 export function useBrokerQuotes(symbols: string[]) {
   return useQuery(brokerQuotesQuery(brokerApi, symbols));
+}
+
+/**
+ * Next earnings date for a set of symbols.
+ *
+ * Not broker-backed — it comes from the market data provider, so it works
+ * before anyone links an account. It lives here anyway because it binds to the
+ * shared query definition like everything else in this file, and splitting it
+ * out by data source would just make callers import from two places.
+ */
+export function useEarnings(symbols: string[]) {
+  return useQuery(earningsQuery(brokerApi, symbols));
 }
 
 export function useOrderActivity(symbol?: string, limit?: number) {

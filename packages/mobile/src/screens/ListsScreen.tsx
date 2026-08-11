@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { BrokerWatchlist, Quote } from '@inktrade/client';
+import type { BrokerWatchlist, EarningsDate, Quote } from '@inktrade/client';
 import type { RootStackParamList } from '../navigation';
 import {
   useBrokerWatchlist,
@@ -20,6 +20,8 @@ import {
 import { API_BASE_URL, API_URL_HINT } from '../lib/api';
 import { PositionRow } from '../components/PositionRow';
 import { OversoldScan } from '../components/OversoldScan';
+import { EarningsBadge } from '../components/EarningsBadge';
+import { useEarnings } from '../hooks/useEarnings';
 import { colors, fonts, radii, spacing } from '../ui/theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -129,6 +131,14 @@ function ListSection({
     return map;
   }, [quotes.data]);
 
+  // Also gated on `open`, for the same reason as the quotes above.
+  const earnings = useEarnings(open ? symbols : []);
+  const earningsBySymbol = useMemo(() => {
+    const map = new Map<string, EarningsDate>();
+    for (const e of earnings.data?.earnings ?? []) map.set(e.symbol, e);
+    return map;
+  }, [earnings.data]);
+
   return (
     <View>
       <Pressable
@@ -174,6 +184,12 @@ function ListSection({
             <PositionRow
               key={symbol}
               symbol={symbol}
+              badge={
+                <EarningsBadge
+                  earnings={earningsBySymbol.get(symbol)}
+                  asOf={earnings.data?.asOf ?? ''}
+                />
+              }
               value={quote?.price ?? 0}
               changePercent={quote?.changePercent ?? 0}
               pending={!quote}
