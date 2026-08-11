@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  classifyTiming,
   countdownLabel,
   daysUntil,
   describeEarnings,
@@ -39,6 +40,30 @@ describe('daysUntil', () => {
     // 2026-11-01 is the US fall-back. Naive local-time arithmetic across it
     // produces a 24.04-day gap that floors to the wrong answer.
     expect(daysUntil('2026-11-09', '2026-10-16')).toBe(24);
+  });
+});
+
+describe('classifyTiming', () => {
+  it('reads the standard release times', () => {
+    expect(classifyTiming(8 * 60 + 30)).toBe('before-open'); // 8:30am ET
+    expect(classifyTiming(16 * 60)).toBe('after-close'); // 4:00pm ET
+    expect(classifyTiming(12 * 60)).toBe('during-session'); // noon
+  });
+
+  it('absorbs the daylight-saving shift in a projected date', () => {
+    // RKLB reported at 20:00Z — 4:00pm EDT, after the close. The provider
+    // carried that same UTC instant into its November estimate, where it reads
+    // as 3:00pm EST. Without the widened window this reports as mid-session,
+    // which is both wrong and alarming.
+    expect(classifyTiming(15 * 60)).toBe('after-close');
+  });
+
+  it('treats midnight as absent rather than as a release time', () => {
+    expect(classifyTiming(0)).toBe('unknown');
+  });
+
+  it('still calls a genuine mid-session hour what it is', () => {
+    expect(classifyTiming(14 * 60 + 59)).toBe('during-session');
   });
 });
 

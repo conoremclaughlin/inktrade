@@ -25,7 +25,11 @@
     "prettier": "^3.8.1"
   },
   "packageManager": "yarn@4.13.0",
+  "_comment_resolutions": "React is pinned to one exact version across every workspace. It has to be: @tanstack/react-query (and anything else peering on react) gets a separate virtual instance per distinct react resolution, which the node-modules linker then materialises next to each consumer. Three reacts -- 19.2.3 hoisted, 19.2.6 in web, 19.2.8 in client -- produced three copies of react-query and three React contexts, so the shared hooks in @inktrade/client called useQueries against a provider that web had set up on a different copy, and every chain page threw 'No QueryClient set'. The version is Expo's: packages/mobile pins react exactly, so the most constrained consumer sets it for everyone. Bump this alongside the Expo SDK, not ahead of it.",
   "resolutions": {
-    "postcss": "^8.5.14"
+    "postcss": "^8.5.14",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "@types/react": "19.2.18"
   }
 }

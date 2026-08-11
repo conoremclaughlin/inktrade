@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import YahooFinance from 'yahoo-finance2';
-import type { EarningsDate, EarningsResponse, EarningsTiming } from '@inktrade/client';
+import { classifyTiming, type EarningsDate, type EarningsResponse } from '@inktrade/client';
 
 /**
  * Next earnings date for many symbols in one upstream call.
@@ -48,16 +48,6 @@ function toMarketMoment(instant: Date): MarketMoment {
     day: `${get('year')}-${get('month')}-${get('day')}`,
     minutes: hour * 60 + Number(get('minute')),
   };
-}
-
-const OPEN_MINUTES = 9 * 60 + 30;
-const CLOSE_MINUTES = 16 * 60;
-
-function classifyTiming(minutes: number): EarningsTiming {
-  if (minutes <= 0) return 'unknown';
-  if (minutes < OPEN_MINUTES) return 'before-open';
-  if (minutes >= CLOSE_MINUTES) return 'after-close';
-  return 'during-session';
 }
 
 function asDate(value: unknown): Date | null {

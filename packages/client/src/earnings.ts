@@ -72,6 +72,40 @@ export interface EarningsResponse {
  */
 export type EarningsProximity = 'past' | 'today' | 'imminent' | 'near' | 'horizon' | 'distant';
 
+/** 9:30am ET, in minutes past midnight. */
+export const MARKET_OPEN_MINUTES = 9 * 60 + 30;
+
+/**
+ * 3:00pm ET, not 4:00 — deliberately an hour early.
+ *
+ * Providers project an *estimated* future report by carrying forward the UTC
+ * instant of the last one, which silently shifts the market-local time by an
+ * hour across a daylight-saving boundary. Measured on 2026-08-11: RKLB
+ * reported at 20:00Z, 4:00pm EDT and safely after the close, and its estimated
+ * next date carried the same 20:00Z into November — where it reads as 3:00pm
+ * EST and lands mid-session.
+ *
+ * Widening the window by exactly the size of the artifact absorbs it. The cost
+ * is calling a genuine 3:30pm release "after close", which is a label being
+ * slightly wrong about a company that essentially does not exist; the benefit
+ * is not telling anyone their earnings land mid-session when they don't.
+ */
+export const MARKET_CLOSE_MINUTES = 15 * 60;
+
+/**
+ * Which session absorbs the report, from its market-local release time.
+ *
+ * Worth knowing because it decides which open you are exposed to: a
+ * before-open report is in today's price, an after-close one in tomorrow's.
+ */
+export function classifyTiming(minutesPastMidnightET: number): EarningsTiming {
+  // Midnight is a placeholder for "no time given", not a real release time.
+  if (minutesPastMidnightET <= 0) return 'unknown';
+  if (minutesPastMidnightET < MARKET_OPEN_MINUTES) return 'before-open';
+  if (minutesPastMidnightET >= MARKET_CLOSE_MINUTES) return 'after-close';
+  return 'during-session';
+}
+
 /** Whole calendar days between two YYYY-MM-DD days. Negative once past. */
 export function daysUntil(date: string, asOf: string): number {
   const a = Date.parse(`${asOf}T00:00:00Z`);
