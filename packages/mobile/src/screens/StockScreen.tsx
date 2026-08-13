@@ -81,6 +81,7 @@ export function StockScreen({ route, navigation }: Props) {
   const last = points[points.length - 1];
   const prev = points[points.length - 2];
   const changePct = last && prev ? ((last.close - prev.close) / prev.close) * 100 : 0;
+  const periodLabel = HISTORY_PERIODS.find((p) => p.value === period)?.label ?? period;
 
   const toggleIndicator = (id: IndicatorId) =>
     setActive((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
@@ -101,7 +102,19 @@ export function StockScreen({ route, navigation }: Props) {
             <Text style={styles.price}>${formatPrice(last.close)}</Text>
             <Text style={[styles.change, { color: changeColor(changePct) }]}>
               {formatPercent(changePct)}
+              <Text style={styles.changeCaption}> today</Text>
             </Text>
+            {/*
+              The selected period's return. Without it the chart changes and
+              every number beside it still describes today — the one span you
+              did not ask for by pressing the button.
+            */}
+            {history.data && (
+              <Text style={[styles.change, { color: changeColor(history.data.totalReturn) }]}>
+                {formatPercent(history.data.totalReturn)}
+                <Text style={styles.changeCaption}> {periodLabel}</Text>
+              </Text>
+            )}
           </View>
         )}
       </View>
@@ -395,6 +408,9 @@ const styles = StyleSheet.create({
   priceBlock: { alignItems: 'flex-end' },
   price: { color: colors.textPrimary, fontFamily: fonts.mono, fontSize: 18 },
   change: { fontFamily: fonts.mono, fontSize: 13 },
+  // The window the number describes, in the quiet colour — the figure carries
+  // the gain/loss colour, the label must not compete with it.
+  changeCaption: { color: colors.textTertiary, fontSize: 11 },
 
   chips: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm },
   chip: {

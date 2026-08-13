@@ -9,14 +9,20 @@ import { OrderActivityPanel } from '@/components/stock/order-activity';
 import { LevelsPanel } from '@/components/stock/levels-panel';
 import { OscillatorPanel } from '@/components/stock/oscillator-panel';
 import { ThetaDecayChart } from '@/components/stock/theta-decay-chart';
+import { HISTORY_PERIODS, type HistoryPeriod } from '@inktrade/client';
 import { EarningsLine } from '@/components/earnings-badge';
 import { useQuote, useTickerHistory } from '@/lib/hooks';
 import { useEarnings } from '@/lib/broker-hooks';
 
-const PERIODS = ['1M', '3M', '6M', '1Y', '2Y', '5Y'] as const;
-const PERIOD_MAP: Record<string, string> = {
-  '1M': '1mo', '3M': '3mo', '6M': '6mo', '1Y': '1y', '2Y': '2y', '5Y': '5y',
-};
+/*
+ * Periods come from @inktrade/client rather than a local table.
+ *
+ * There used to be two: a display list here and a lookup in the history lib,
+ * keyed '1m'/'3m'/'6m' against this file's '1mo'/'3mo'/'6mo'. Three of the six
+ * buttons therefore missed the lookup, fell through to the default, and served
+ * a year of bars whichever you pressed. One list, shared with mobile, is the
+ * fix that keeps it fixed.
+ */
 
 const POPULAR = [
   { symbol: 'SPY', label: 'S&P 500' },
@@ -46,20 +52,22 @@ function StockContent() {
   const [input, setInput] = useState(
     () => searchParams.get('symbol')?.toUpperCase() || 'SPY'
   );
-  const [period, setPeriod] = useState<string>(
-    () => searchParams.get('period')?.toUpperCase() || '1Y'
-  );
+  const [period, setPeriod] = useState<HistoryPeriod>(() => {
+    const raw = searchParams.get('period')?.toLowerCase();
+    return HISTORY_PERIODS.some((p) => p.value === raw) ? (raw as HistoryPeriod) : '1y';
+  });
 
   useEffect(() => {
     const params = new URLSearchParams();
     if (symbol !== 'SPY') params.set('symbol', symbol);
-    if (period !== '1Y') params.set('period', period);
+    if (period !== '1y') params.set('period', period);
     const qs = params.toString();
     window.history.replaceState(null, '', `/stock${qs ? `?${qs}` : ''}`);
   }, [symbol, period]);
 
   const quote = useQuote(symbol);
-  const history = useTickerHistory(symbol, PERIOD_MAP[period] ?? '1y');
+  const history = useTickerHistory(symbol, period);
+  const periodLabel = HISTORY_PERIODS.find((p) => p.value === period)?.label ?? period;
   const { data: earningsData } = useEarnings([symbol]);
   const earnings = earningsData?.earnings.find((e) => e.symbol === symbol) ?? null;
 
@@ -126,7 +134,23 @@ function StockContent() {
                   }`}>
                     {quote.data.change >= 0 ? '+' : ''}{quote.data.change.toFixed(2)}{' '}
                     ({quote.data.changePercent >= 0 ? '+' : ''}{quote.data.changePercent.toFixed(2)}%)
+                    <span className="ml-1.5 text-text-tertiary font-normal">today</span>
                   </div>
+                  {/*
+                    The selected period's return, beside the price rather than
+                    in the stats grid below a 500px chart. Changing the period
+                    used to change only the picture; the number next to it kept
+                    describing today, which is the one span you did not ask for.
+                  */}
+                  {history.data && (
+                    <div className={`text-[13px] font-mono font-medium ${
+                      history.data.totalReturn >= 0 ? 'text-emerald' : 'text-rose'
+                    }`}>
+                      {history.data.totalReturn >= 0 ? '+' : ''}
+                      {history.data.totalReturn.toFixed(2)}%
+                      <span className="ml-1.5 text-text-tertiary font-normal">{periodLabel}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -171,17 +195,17 @@ function StockContent() {
                 </p>
               </div>
               <div className="flex gap-1 glass rounded-lg p-0.5">
-                {PERIODS.map((p) => (
+                {HISTORY_PERIODS.map((p) => (
                   <button
-                    key={p}
-                    onClick={() => setPeriod(p)}
+                    key={p.value}
+                    onClick={() => setPeriod(p.value)}
                     className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-medium transition-all ${
-                      period === p
+                      period === p.value
                         ? 'bg-accent/15 text-accent-bright border border-accent/30'
                         : 'text-text-muted hover:text-text-secondary'
                     }`}
                   >
-                    {p}
+                    {p.label}
                   </button>
                 ))}
               </div>
