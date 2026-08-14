@@ -7,6 +7,7 @@ import {
   isPaper,
   comboPrices,
   depthView,
+  formatSpreadPercent,
   orderPrices,
   priceAt,
   type OrderOutcome,
@@ -476,7 +477,7 @@ function BookDepth({ depth }: { depth: DepthView }) {
           {depth.bidSize !== null ? <Text style={styles.depthSize}> ×{depth.bidSize}</Text> : null}
         </Text>
         <Text style={styles.depthLabel}>
-          {depth.spreadPercent === null ? 'no market' : `${depth.spreadPercent.toFixed(1)}% wide`}
+          {depth.spreadPercent === null ? 'no market' : `${formatSpreadPercent(depth.spreadPercent)} wide`}
         </Text>
         <Text style={[styles.depthSide, styles.depthRight]}>
           {depth.askSize !== null ? <Text style={styles.depthSize}>×{depth.askSize} </Text> : null}

@@ -6,6 +6,7 @@ import {
   checkLimitPrice,
   comboPrices,
   depthView,
+  formatSpreadPercent,
   orderPrices,
   priceAt,
   type DepthView,
@@ -491,7 +492,7 @@ function BookDepth({ depth }: { depth: DepthView }) {
           )}
         </span>
         <span className="text-[10px] uppercase tracking-[0.1em] text-text-tertiary">
-          {depth.spreadPercent === null ? 'no market' : `${depth.spreadPercent.toFixed(1)}% wide`}
+          {depth.spreadPercent === null ? 'no market' : `${formatSpreadPercent(depth.spreadPercent)} wide`}
         </span>
         <span className="font-mono text-[13px] text-text-primary tabular-nums">
           {depth.askSize !== null && (

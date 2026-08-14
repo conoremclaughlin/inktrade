@@ -7,6 +7,7 @@ import {
   checkLimitPrice,
   comboPrices,
   depthView,
+  formatSpreadPercent,
   nextRung,
   walkPlan,
   type ComboLeg,
@@ -163,6 +164,27 @@ describe('depthView', () => {
   it('says nothing about a tight, deep book', () => {
     const v = depthView({ bid: 5.0, ask: 5.05, bidSize: 200, askSize: 200 });
     expect(v.notes).toEqual([]);
+  });
+});
+
+describe('formatSpreadPercent', () => {
+  it('keeps two decimals below one percent', () => {
+    // Seen on the simulator: SOXL quoted 143.95/144.00 and the ticket read
+    // "0.0% wide" directly under a header saying 0.03%. A tight book must not
+    // render as NO book.
+    expect(formatSpreadPercent(0.03)).toBe('0.03%');
+    expect(formatSpreadPercent(0.99)).toBe('0.99%');
+  });
+
+  it('drops to one decimal above one percent', () => {
+    // Nobody needs a hundredth of a percent once the answer is "too wide".
+    expect(formatSpreadPercent(17.75)).toBe('17.8%');
+    expect(formatSpreadPercent(38.19)).toBe('38.2%');
+  });
+
+  it('renders an unknown spread as a dash, not as zero', () => {
+    expect(formatSpreadPercent(null)).toBe('—');
+    expect(formatSpreadPercent(Number.NaN)).toBe('—');
   });
 });
 

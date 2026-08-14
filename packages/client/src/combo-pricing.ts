@@ -220,6 +220,20 @@ export interface DepthView {
 /** A spread wider than this fraction of mid is worth saying out loud. */
 export const WIDE_SPREAD_PERCENT = 10;
 
+/**
+ * A spread width as a percentage, at a precision that does not lie.
+ *
+ * Rendering with one decimal turns a tight book into "0.0% wide", which reads
+ * as *no* spread rather than a small one — and sat directly under a header
+ * quoting the same book as 0.03%, so the ticket contradicted itself. Sub-one
+ * percent gets two decimals; above that one is plenty, because nobody needs a
+ * hundredth of a percent when the answer is already "too wide".
+ */
+export function formatSpreadPercent(percent: number | null): string {
+  if (percent === null || !Number.isFinite(percent)) return '—';
+  return percent < 1 ? `${percent.toFixed(2)}%` : `${percent.toFixed(1)}%`;
+}
+
 /** At or below this many contracts, the touch is not a market. */
 export const THIN_SIZE = 5;
 
