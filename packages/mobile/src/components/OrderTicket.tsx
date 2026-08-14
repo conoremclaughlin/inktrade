@@ -3,6 +3,9 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import {
   COST_BASIS_LABELS,
   canPlaceOrders,
+  checkLimitPrice,
+  comboPrices,
+  depthView,
   orderPrices,
   priceAt,
   type OrderOutcome,
@@ -10,6 +13,7 @@ import {
   type OrderReview,
   type OrderSide,
   type OrderType,
+  type DepthView,
   type PriceLevel,
   type SalePlan,
   type TradingModeDecision,
@@ -20,6 +24,14 @@ import { colors, fonts, formatMoney, radii, spacing } from '../ui/theme';
 interface Book {
   bid: number | null;
   ask: number | null;
+  /**
+   * Contracts resting at the touch, when the broker publishes them.
+   *
+   * Optional because not every quote carries size, and a ticket that refused
+   * to render without it would be worse than one that renders price alone.
+   */
+  bidSize?: number | null;
+  askSize?: number | null;
 }
 
 /**
@@ -54,6 +66,39 @@ export function OrderTicket({
 
   const review = useReviewOrder();
   const place = usePlaceOrder();
+
+  /*
+   * Two views of the same book, doing different jobs.
+   *
+   * `prices` is the bid/mid/ask the price buttons bind to. `depth` is what the
+   * book is worth trusting — size behind each side, and how wide it is. A
+   * ticket that shows only the first is the deception this screen exists to
+   * stop: RKLB quoted 7.50/7.80 with a single contract on the bid.
+   */
+  const depth = useMemo(
+    () =>
+      depthView({
+        bid: book.bid,
+        ask: book.ask,
+        bidSize: book.bidSize ?? null,
+        askSize: book.askSize ?? null,
+      }),
+    [book.bid, book.ask, book.bidSize, book.askSize],
+  );
+
+  /*
+   * The guard prices a single leg as a one-leg combo, so a ticket and a spread
+   * are checked by exactly the same code — a limit that would be blocked on a
+   * vertical must not sail through on an outright.
+   */
+  const limitCheck = useMemo(() => {
+    const value = Number(limitPrice);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return checkLimitPrice({
+      limit: value,
+      prices: comboPrices([{ side, quote: { bid: book.bid, ask: book.ask } }]),
+    });
+  }, [limitPrice, side, book.bid, book.ask]);
 
   const prices = useMemo(
     () => orderPrices({ bid: book.bid, ask: book.ask, side }),
@@ -111,6 +156,13 @@ export function OrderTicket({
         )}
       </View>
 
+      {/*
+        The book with its size, not just its price.
+        A one-contract bid is not a market, and nothing else on this screen
+        would have told you so.
+      */}
+      <BookDepth depth={depth} />
+
       <Segmented
         options={[
           { value: 'BUY', label: 'Buy' },
@@ -157,6 +209,31 @@ export function OrderTicket({
               placeholderTextColor={colors.textMuted}
             />
           </Field>
+
+          {/*
+            Directly under the field that caused the problem.
+            A warning placed anywhere else is a warning read after the fact.
+          */}
+          {limitCheck && limitCheck.verdict !== 'ok' && (
+            <View
+              style={[
+                styles.guard,
+                limitCheck.verdict === 'blocked' ? styles.guardBlocked : styles.guardCaution,
+              ]}
+            >
+              {limitCheck.reasons.map((reason) => (
+                <Text
+                  key={reason}
+                  style={[
+                    styles.guardText,
+                    limitCheck.verdict === 'blocked' ? styles.guardTextBlocked : null,
+                  ]}
+                >
+                  {reason}
+                </Text>
+              ))}
+            </View>
+          )}
 
           {/*
             The thinkorswim convention. Prefilling one price and calling it
@@ -372,6 +449,52 @@ function PlanPanel({ plan }: { plan: SalePlan }) {
   );
 }
 
+/**
+ * Bid and ask with the size behind each, and a bar showing the balance.
+ *
+ * The bar is the point. Two prices a penny apart read as a market whichever
+ * way the size sits, and the only way to see that one of them is a single
+ * contract is to draw it.
+ */
+function BookDepth({ depth }: { depth: DepthView }) {
+  const share = depth.bidDepthShare;
+
+  return (
+    <View style={styles.depth}>
+      <View style={styles.depthRow}>
+        <Text style={styles.depthSide}>
+          <Text style={styles.depthPrice}>{depth.bid === null ? '—' : formatMoney(depth.bid)}</Text>
+          {depth.bidSize !== null ? <Text style={styles.depthSize}> ×{depth.bidSize}</Text> : null}
+        </Text>
+        <Text style={styles.depthLabel}>
+          {depth.spreadPercent === null ? 'no market' : `${depth.spreadPercent.toFixed(1)}% wide`}
+        </Text>
+        <Text style={[styles.depthSide, styles.depthRight]}>
+          {depth.askSize !== null ? <Text style={styles.depthSize}>×{depth.askSize} </Text> : null}
+          <Text style={styles.depthPrice}>{depth.ask === null ? '—' : formatMoney(depth.ask)}</Text>
+        </Text>
+      </View>
+
+      {/*
+        Drawn only when at least one side publishes size. A 50/50 bar from no
+        data would assert a balanced market that may not exist.
+      */}
+      {share !== null && (
+        <View style={styles.depthBar}>
+          <View style={[styles.depthFill, styles.depthBid, { flex: Math.max(share, 0.02) }]} />
+          <View style={[styles.depthFill, styles.depthAsk, { flex: Math.max(1 - share, 0.02) }]} />
+        </View>
+      )}
+
+      {depth.notes.map((note) => (
+        <Text key={note} style={styles.depthNote}>
+          {note}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <View style={styles.field}>
@@ -413,6 +536,38 @@ function Segmented({
 }
 
 const styles = StyleSheet.create({
+  depth: { gap: 6 },
+  depthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  depthSide: { flex: 1 },
+  depthRight: { textAlign: 'right' },
+  depthPrice: { fontFamily: fonts.mono, fontSize: 13, color: colors.textPrimary },
+  depthSize: { fontFamily: fonts.mono, fontSize: 11, color: colors.textTertiary },
+  depthLabel: { fontSize: 10, color: colors.textTertiary, paddingHorizontal: spacing.sm },
+  depthBar: { flexDirection: 'row', height: 4, borderRadius: 2, overflow: 'hidden', gap: 2 },
+  depthFill: { height: 4, borderRadius: 2 },
+  // Neutral, not green/red — this is size, not gain and loss.
+  depthBid: { backgroundColor: colors.accentDim },
+  depthAsk: { backgroundColor: colors.borderBright },
+  depthNote: { fontSize: 11, color: colors.amber, lineHeight: 15 },
+
+  guard: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: 4,
+  },
+  guardCaution: {
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+  },
+  guardBlocked: {
+    borderColor: 'rgba(244, 63, 94, 0.5)',
+    backgroundColor: 'rgba(244, 63, 94, 0.10)',
+  },
+  guardText: { fontSize: 12, color: colors.amber, lineHeight: 17 },
+  guardTextBlocked: { color: colors.rose },
+
   card: {
     marginHorizontal: spacing.lg,
     padding: spacing.md,

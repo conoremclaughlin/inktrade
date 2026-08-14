@@ -195,6 +195,76 @@ export function bookQuality(legs: ComboLeg[]): BookQuality {
   return { worstSpreadPercent, tradableSize, oneSided, naturalIsPerverse };
 }
 
+// --- What a ticket should draw --------------------------------------------
+
+export interface DepthView {
+  bid: number | null;
+  ask: number | null;
+  bidSize: number | null;
+  askSize: number | null;
+  spread: number | null;
+  /** Spread as a percent of the mid. The number that says "this is expensive". */
+  spreadPercent: number | null;
+  /**
+   * Bid's share of the visible size, 0..1, for a two-sided depth bar.
+   *
+   * Null when neither side publishes size — a bar drawn at 50/50 from no data
+   * would invent a balanced market, which is the specific lie this is meant to
+   * prevent.
+   */
+  bidDepthShare: number | null;
+  /** Sentences about the BOOK, independent of any price the user has typed. */
+  notes: string[];
+}
+
+/** A spread wider than this fraction of mid is worth saying out loud. */
+export const WIDE_SPREAD_PERCENT = 10;
+
+/** At or below this many contracts, the touch is not a market. */
+export const THIN_SIZE = 5;
+
+/**
+ * The book as a ticket should present it: price, size, and how much either
+ * can be trusted.
+ *
+ * Exists because bid/ask without size is the core deception. Measured on RKLB,
+ * the 80P quoted bid 7.50 x1 against ask 7.80 x13 — a tight-looking spread
+ * with one contract behind it. Selling ten "at the bid" clears one and fills
+ * the rest lower.
+ */
+export function depthView(quote: LegQuote): DepthView {
+  const bid = finite(quote.bid);
+  const ask = finite(quote.ask);
+  const bidSize = finite(quote.bidSize ?? null);
+  const askSize = finite(quote.askSize ?? null);
+  const notes: string[] = [];
+
+  const spread = bid !== null && ask !== null ? round2(ask - bid) : null;
+  const mid = bid !== null && ask !== null ? (bid + ask) / 2 : null;
+  const spreadPercent = mid !== null && mid > 0 && spread !== null ? round2((spread / mid) * 100) : null;
+
+  const totalSize = (bidSize ?? 0) + (askSize ?? 0);
+  const bidDepthShare =
+    bidSize === null && askSize === null ? null : totalSize > 0 ? round2((bidSize ?? 0) / totalSize) : null;
+
+  if (bid === null || ask === null) {
+    notes.push('One-sided book — there is no midpoint to price against.');
+  }
+  if (spreadPercent !== null && spreadPercent >= WIDE_SPREAD_PERCENT) {
+    notes.push(
+      `The spread is ${spreadPercent.toFixed(0)}% of the contract's value. Crossing it costs more than most trades make.`,
+    );
+  }
+  if (bidSize !== null && bidSize <= THIN_SIZE) {
+    notes.push(`Only ${bidSize} on the bid — selling more than that fills the rest lower.`);
+  }
+  if (askSize !== null && askSize <= THIN_SIZE) {
+    notes.push(`Only ${askSize} on the ask — buying more than that fills the rest higher.`);
+  }
+
+  return { bid, ask, bidSize, askSize, spread, spreadPercent, bidDepthShare, notes };
+}
+
 // --- Fat-finger guard ------------------------------------------------------
 
 export type PriceVerdict = 'ok' | 'caution' | 'blocked';

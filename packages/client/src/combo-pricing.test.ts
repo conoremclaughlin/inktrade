@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   BLOCK_DEVIATION_PERCENT,
   CAUTION_DEVIATION_PERCENT,
+  WIDE_SPREAD_PERCENT,
   bookQuality,
   checkLimitPrice,
   comboPrices,
+  depthView,
   nextRung,
   walkPlan,
   type ComboLeg,
@@ -120,6 +122,47 @@ describe('bookQuality', () => {
   it('flags a one-sided book', () => {
     const q = bookQuality([{ side: 'SELL', quote: { bid: 5, ask: null } }]);
     expect(q.oneSided).toBe(true);
+  });
+});
+
+describe('depthView', () => {
+  it('measures the spread against the mid', () => {
+    // RKLB 85P: 9.50/11.35, a $1.85 spread on a $10.43 mid.
+    const v = depthView({ bid: 9.5, ask: 11.35, bidSize: 501, askSize: 381 });
+    expect(v.spread).toBeCloseTo(1.85, 2);
+    expect(v.spreadPercent).toBeCloseTo(17.75, 1);
+    // The sentence rounds to whole percent; the field keeps the precision.
+    expect(v.notes.join(' ')).toContain('18%');
+  });
+
+  it('calls out a one-contract bid — the whole reason this exists', () => {
+    // RKLB 80P: looks tight at 7.50/7.80, one contract behind the bid.
+    const v = depthView({ bid: 7.5, ask: 7.8, bidSize: 1, askSize: 13 });
+    expect(v.spreadPercent).toBeLessThan(WIDE_SPREAD_PERCENT); // reads tight
+    expect(v.notes.join(' ')).toContain('Only 1 on the bid');
+  });
+
+  it('computes a depth share for the bar', () => {
+    const v = depthView({ bid: 5, ask: 5.2, bidSize: 54, askSize: 1 });
+    expect(v.bidDepthShare).toBeCloseTo(54 / 55, 2);
+  });
+
+  it('refuses to invent a balanced bar when no size is published', () => {
+    // A 50/50 bar drawn from nothing would assert a market that may not exist.
+    const v = depthView({ bid: 5, ask: 5.2 });
+    expect(v.bidDepthShare).toBeNull();
+  });
+
+  it('flags a one-sided book', () => {
+    const v = depthView({ bid: 5, ask: null });
+    expect(v.spread).toBeNull();
+    expect(v.spreadPercent).toBeNull();
+    expect(v.notes.join(' ')).toContain('One-sided');
+  });
+
+  it('says nothing about a tight, deep book', () => {
+    const v = depthView({ bid: 5.0, ask: 5.05, bidSize: 200, askSize: 200 });
+    expect(v.notes).toEqual([]);
   });
 });
 

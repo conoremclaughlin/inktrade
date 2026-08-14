@@ -3,8 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   COST_BASIS_LABELS,
+  checkLimitPrice,
+  comboPrices,
+  depthView,
   orderPrices,
   priceAt,
+  type DepthView,
   type OrderRequest,
   type OrderReceipt,
   type OrderReview,
@@ -18,6 +22,9 @@ interface Quote {
   bid: number | null;
   ask: number | null;
   price: number | null;
+  /** Resting size at the touch, when the broker publishes it. */
+  bidSize?: number | null;
+  askSize?: number | null;
 }
 
 interface ReviewResponse {
@@ -62,6 +69,36 @@ export function OrderTicket({
     () => orderPrices({ bid: quote?.bid, ask: quote?.ask, side }),
     [quote?.bid, quote?.ask, side],
   );
+
+  /*
+   * What the book is worth trusting, as distinct from what it says the price
+   * is. Same derivation as mobile, from @inktrade/client, so the two platforms
+   * cannot disagree about whether a market is real.
+   */
+  const depth = useMemo(
+    () =>
+      depthView({
+        bid: quote?.bid ?? null,
+        ask: quote?.ask ?? null,
+        bidSize: quote?.bidSize ?? null,
+        askSize: quote?.askSize ?? null,
+      }),
+    [quote?.bid, quote?.ask, quote?.bidSize, quote?.askSize],
+  );
+
+  /*
+   * A single leg is checked as a one-leg combo, so an outright and a vertical
+   * are judged by exactly the same code — a price blocked on one must not sail
+   * through on the other.
+   */
+  const limitCheck = useMemo(() => {
+    const value = Number(limitPrice);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return checkLimitPrice({
+      limit: value,
+      prices: comboPrices([{ side, quote: { bid: quote?.bid ?? null, ask: quote?.ask ?? null } }]),
+    });
+  }, [limitPrice, side, quote?.bid, quote?.ask]);
 
   // Arrive at the marketable price — the ask to buy, the bid to sell.
   //
@@ -138,6 +175,13 @@ export function OrderTicket({
       </div>
 
       <div className="space-y-4 p-5">
+        {/*
+          The book with its size. Two prices a penny apart read as a market
+          whichever way the size sits behind them, and the only way to see that
+          one is a single contract is to draw it.
+        */}
+        <BookDepth depth={depth} />
+
         <Segmented
           options={[
             { value: 'BUY', label: 'Buy' },
@@ -186,6 +230,25 @@ export function OrderTicket({
                 className="w-full bg-transparent py-2.5 font-mono text-[15px] text-text-primary outline-none tabular-nums"
               />
             </Field>
+
+            {/*
+              Directly under the field that caused the problem. A warning
+              anywhere else is a warning read after the fact.
+            */}
+            {limitCheck && limitCheck.verdict !== 'ok' && (
+              <div
+                role={limitCheck.verdict === 'blocked' ? 'alert' : 'status'}
+                className={`space-y-1 rounded-lg border px-3 py-2 text-[12px] leading-relaxed ${
+                  limitCheck.verdict === 'blocked'
+                    ? 'border-rose/50 bg-rose/10 text-rose'
+                    : 'border-amber/40 bg-amber/8 text-amber'
+                }`}
+              >
+                {limitCheck.reasons.map((reason) => (
+                  <p key={reason}>{reason}</p>
+                ))}
+              </div>
+            )}
 
             {/*
               The ToS convention. Prefilling one price and calling it "the"
@@ -404,6 +467,57 @@ function PlanPanel({ plan }: { plan: SalePlan }) {
           </span>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Bid and ask with the size behind each, and a bar showing the balance.
+ *
+ * Neutral colours on the bar deliberately: this is depth, not profit and loss,
+ * and borrowing the green/red palette would make a thin bid look like a
+ * position going wrong.
+ */
+function BookDepth({ depth }: { depth: DepthView }) {
+  const share = depth.bidDepthShare;
+
+  return (
+    <div className="space-y-1.5 rounded-lg border border-border-subtle px-3 py-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="font-mono text-[13px] text-text-primary tabular-nums">
+          {depth.bid === null ? '—' : `$${depth.bid.toFixed(2)}`}
+          {depth.bidSize !== null && (
+            <span className="ml-1 text-[11px] text-text-tertiary">×{depth.bidSize}</span>
+          )}
+        </span>
+        <span className="text-[10px] uppercase tracking-[0.1em] text-text-tertiary">
+          {depth.spreadPercent === null ? 'no market' : `${depth.spreadPercent.toFixed(1)}% wide`}
+        </span>
+        <span className="font-mono text-[13px] text-text-primary tabular-nums">
+          {depth.askSize !== null && (
+            <span className="mr-1 text-[11px] text-text-tertiary">×{depth.askSize}</span>
+          )}
+          {depth.ask === null ? '—' : `$${depth.ask.toFixed(2)}`}
+        </span>
+      </div>
+
+      {/* Only when a side publishes size — a 50/50 bar from nothing would
+          assert a balanced market that may not exist. */}
+      {share !== null && (
+        <div className="flex h-1 gap-0.5 overflow-hidden rounded-full">
+          <div className="rounded-full bg-accent-dim" style={{ flex: Math.max(share, 0.02) }} />
+          <div
+            className="rounded-full bg-border-bright"
+            style={{ flex: Math.max(1 - share, 0.02) }}
+          />
+        </div>
+      )}
+
+      {depth.notes.map((note) => (
+        <p key={note} className="text-[11px] leading-snug text-amber">
+          {note}
+        </p>
+      ))}
     </div>
   );
 }
