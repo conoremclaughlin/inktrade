@@ -4,6 +4,7 @@ import {
   COST_BASIS_LABELS,
   canPlaceOrders,
   checkLimitPrice,
+  isPaper,
   comboPrices,
   depthView,
   orderPrices,
@@ -131,6 +132,7 @@ export function OrderTicket({
   const busy = review.isPending || place.isPending;
 
   const canPlace = mode ? canPlaceOrders(mode) : true;
+  const paper = mode ? isPaper(mode) : false;
   const reviewed = outcome?.review;
   const placeable = Boolean(reviewed) && reviewed?.acceptable !== false && canPlace && !busy;
 
@@ -309,6 +311,13 @@ export function OrderTicket({
                 { color: side === 'BUY' ? colors.emeraldBright : colors.rose },
               ]}
             >
+              {/*
+                The word "paper" belongs on the button itself, not only in a
+                notice above it. A label reading "Sell RKLB" is the same label
+                whether or not money moves, and this is the last thing anyone
+                reads before pressing.
+              */}
+              {paper ? 'Paper ' : ''}
               {side === 'BUY' ? 'Buy' : 'Sell'} {symbol}
             </Text>
           )}
@@ -316,8 +325,8 @@ export function OrderTicket({
       </View>
 
       {mode && !canPlace && mode.reason && (
-        <View style={styles.notice}>
-          <Text style={styles.noticeText}>{mode.reason}</Text>
+        <View style={[styles.notice, paper && styles.noticePaper]}>
+          <Text style={[styles.noticeText, paper && styles.noticeTextPaper]}>{mode.reason}</Text>
         </View>
       )}
 
@@ -566,6 +575,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(244, 63, 94, 0.10)',
   },
   guardText: { fontSize: 12, color: colors.amber, lineHeight: 17 },
+  // Paper reads as information, not warning — blue, not amber.
+  noticePaper: { borderColor: 'rgba(59,130,246,0.4)', backgroundColor: 'rgba(59,130,246,0.10)' },
+  noticeTextPaper: { color: colors.accentBright },
   guardTextBlocked: { color: colors.rose },
 
   card: {

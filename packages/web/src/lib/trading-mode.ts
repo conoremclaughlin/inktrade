@@ -19,10 +19,24 @@ export async function tradingMode(): Promise<TradingModeDecision> {
   });
 }
 
+/**
+ * Modes a user may choose for themselves.
+ *
+ * Written as a set rather than a chain of comparisons because it is checked in
+ * two places — here on read and in the route on write — and the failure mode
+ * of the two drifting apart is a setting that saves and then silently does not
+ * apply.
+ */
+export const USER_SELECTABLE_MODES: readonly TradingMode[] = ['ENABLED', 'PAPER', 'REVIEW_ONLY'];
+
+export function isSelectableMode(value: unknown): value is TradingMode {
+  return typeof value === 'string' && (USER_SELECTABLE_MODES as readonly string[]).includes(value);
+}
+
 async function readSetting(): Promise<TradingMode | null> {
   try {
-    const parsed = JSON.parse(await readFile(SETTINGS_PATH, 'utf8')) as { mode?: TradingMode };
-    return parsed.mode === 'REVIEW_ONLY' || parsed.mode === 'ENABLED' ? parsed.mode : null;
+    const parsed = JSON.parse(await readFile(SETTINGS_PATH, 'utf8')) as { mode?: unknown };
+    return isSelectableMode(parsed.mode) ? parsed.mode : null;
   } catch {
     // No file yet, or unreadable. Absent is not review-only — the default is
     // decided by resolveTradingMode, in one place.

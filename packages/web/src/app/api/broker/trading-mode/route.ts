@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isModeUserControlled } from '@inktrade/client';
-import { saveTradingModeSetting, tradingMode } from '@/lib/trading-mode';
+import {
+  USER_SELECTABLE_MODES,
+  isSelectableMode,
+  saveTradingModeSetting,
+  tradingMode,
+} from '@/lib/trading-mode';
 
 export async function GET() {
   return NextResponse.json(await tradingMode());
@@ -8,9 +13,12 @@ export async function GET() {
 
 /** Change the user's own preference. Refused while an env override is active. */
 export async function PUT(request: NextRequest) {
-  const body = (await request.json().catch(() => ({}))) as { mode?: string };
-  if (body.mode !== 'ENABLED' && body.mode !== 'REVIEW_ONLY') {
-    return NextResponse.json({ error: 'mode must be ENABLED or REVIEW_ONLY' }, { status: 400 });
+  const body = (await request.json().catch(() => ({}))) as { mode?: unknown };
+  if (!isSelectableMode(body.mode)) {
+    return NextResponse.json(
+      { error: `mode must be one of ${USER_SELECTABLE_MODES.join(', ')}` },
+      { status: 400 },
+    );
   }
 
   const current = await tradingMode();

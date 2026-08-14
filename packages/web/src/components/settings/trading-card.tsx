@@ -12,6 +12,43 @@ import {
 } from '@inktrade/client';
 
 /**
+ * The three placement modes, in increasing order of consequence.
+ *
+ * Ordered deliberately: review-only first, paper second, live last, so the
+ * rightmost option is the one that spends money. Colour follows the same
+ * logic — only live is green, because only live is real.
+ */
+const MODE_CHOICES: ReadonlyArray<{
+  value: TradingMode;
+  label: string;
+  detail: string;
+  onClass: string;
+  labelClass: string;
+}> = [
+  {
+    value: 'REVIEW_ONLY',
+    label: 'Review only',
+    detail: 'Priced and checked. Nothing is ever submitted.',
+    onClass: 'border-border-bright bg-surface',
+    labelClass: 'text-text-primary',
+  },
+  {
+    value: 'PAPER',
+    label: 'Paper',
+    detail: 'Filled against a simulation of the live book. No money moves.',
+    onClass: 'border-accent/40 bg-accent/12',
+    labelClass: 'text-accent-bright',
+  },
+  {
+    value: 'ENABLED',
+    label: 'Live',
+    detail: 'Orders you confirm are sent to the brokerage.',
+    onClass: 'border-emerald/40 bg-emerald/12',
+    labelClass: 'text-emerald',
+  },
+];
+
+/**
  * The two settings that change what actually happens to money.
  *
  * Kept together and away from the connection cards because they aren't
@@ -53,7 +90,7 @@ export function TradingCard() {
   });
 
   const canToggle = mode.data ? isModeUserControlled(mode.data) : false;
-  const reviewOnly = mode.data?.mode === 'REVIEW_ONLY';
+  const current = mode.data?.mode ?? 'ENABLED';
 
   return (
     <section className="mt-6 glass-bright rounded-xl border border-border-subtle overflow-hidden">
@@ -66,35 +103,48 @@ export function TradingCard() {
 
       <div className="divide-y divide-border-subtle">
         <div className="p-6">
-          <div className="flex items-start justify-between gap-6">
-            <div className="min-w-0">
-              <h3 className="text-[14px] font-semibold text-text-primary">Order placement</h3>
-              <p className="mt-1 text-[12px] leading-relaxed text-text-tertiary">
-                {reviewOnly
-                  ? 'Orders are priced and checked, never submitted.'
-                  : 'Orders you confirm are sent to the brokerage.'}
-              </p>
-            </div>
+          <h3 className="text-[14px] font-semibold text-text-primary">Order placement</h3>
+          <p className="mt-1 text-[12px] leading-relaxed text-text-tertiary">
+            Three states, not a switch. Paper is not "off" — orders are priced against the live
+            market and filled against a simulation, which is a different thing from not sending
+            them at all.
+          </p>
 
-            <button
-              type="button"
-              role="switch"
-              aria-checked={!reviewOnly}
-              aria-label="Allow order placement"
-              disabled={!canToggle || setMode.isPending}
-              onClick={() => setMode.mutate(reviewOnly ? 'ENABLED' : 'REVIEW_ONLY')}
-              className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors disabled:opacity-40 disabled:cursor-default ${
-                reviewOnly
-                  ? 'border-border-subtle bg-surface'
-                  : 'border-emerald/40 bg-emerald/25'
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 h-4.5 w-4.5 rounded-full bg-text-primary transition-transform ${
-                  reviewOnly ? 'left-0.5' : 'left-0.5 translate-x-5'
-                }`}
-              />
-            </button>
+          {/*
+            Radios rather than a toggle. A two-state switch cannot express
+            three modes, and the one in the middle is the one where someone
+            most needs to be certain which state they are in.
+          */}
+          <div
+            role="radiogroup"
+            aria-label="Order placement mode"
+            className="mt-3 grid gap-2 sm:grid-cols-3"
+          >
+            {MODE_CHOICES.map((choice) => {
+              const on = current === choice.value;
+              return (
+                <button
+                  key={choice.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  disabled={!canToggle || setMode.isPending}
+                  onClick={() => setMode.mutate(choice.value)}
+                  className={`rounded-lg border px-3 py-2.5 text-left transition-colors disabled:cursor-default disabled:opacity-40 ${
+                    on ? choice.onClass : 'border-border-subtle hover:border-border-default'
+                  }`}
+                >
+                  <span
+                    className={`block text-[13px] font-semibold ${on ? choice.labelClass : 'text-text-secondary'}`}
+                  >
+                    {choice.label}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-text-tertiary">
+                    {choice.detail}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {mode.data?.reason && (
