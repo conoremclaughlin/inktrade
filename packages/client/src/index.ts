@@ -14,6 +14,7 @@ export * from './broker/mock.js';
 export * from './tax-lots.js';
 export * from './trading-mode.js';
 export * from './order-pricing.js';
+export * from './combo-pricing.js';
 export * from './broker/advisories.js';
 
 /*
