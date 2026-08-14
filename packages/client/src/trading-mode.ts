@@ -21,7 +21,17 @@ export type TradingMode =
   /** Orders can be placed. */
   | 'ENABLED'
   /** Orders can be reviewed and priced, never submitted. */
-  | 'REVIEW_ONLY';
+  | 'REVIEW_ONLY'
+  /**
+   * Orders are accepted, priced against the LIVE book, filled against a
+   * simulation, and recorded — but never transmitted to the broker.
+   *
+   * Distinct from REVIEW_ONLY, which stops at the price. Paper carries the
+   * order all the way through a fill and a position, so the parts that only
+   * exist after submission — partial fills, a working order, a walk conceding
+   * rung by rung — can be exercised without money.
+   */
+  | 'PAPER';
 
 export type TradingModeSource = 'env' | 'setting' | 'default';
 
@@ -74,12 +84,39 @@ export function resolveTradingMode(input: TradingModeInput = {}): TradingModeDec
     };
   }
 
+  if (input.setting === 'PAPER') {
+    return {
+      mode: 'PAPER',
+      source: 'setting',
+      reason:
+        'Paper trading is on. Orders are priced against the live market and filled against a ' +
+        'simulation — nothing reaches your brokerage and no real money moves.',
+    };
+  }
+
   return { mode: 'ENABLED', source: input.setting === 'ENABLED' ? 'setting' : 'default' };
 }
 
-/** True when this decision permits placing an order. */
+/**
+ * True when this decision permits sending an order to the BROKER.
+ *
+ * Paper is false here, deliberately. Every call site that guards a real
+ * submission keeps working unchanged when paper is introduced — the failure
+ * mode of getting this wrong is a live order someone believed was simulated,
+ * so the default has to be "not real".
+ */
 export function canPlaceOrders(decision: TradingModeDecision): boolean {
   return decision.mode === 'ENABLED';
+}
+
+/** True when an order can be worked at all, really or in simulation. */
+export function canWorkOrders(decision: TradingModeDecision): boolean {
+  return decision.mode === 'ENABLED' || decision.mode === 'PAPER';
+}
+
+/** True when fills are simulated and must be labelled as such wherever shown. */
+export function isPaper(decision: TradingModeDecision): boolean {
+  return decision.mode === 'PAPER';
 }
 
 /**

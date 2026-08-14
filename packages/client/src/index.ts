@@ -15,6 +15,8 @@ export * from './tax-lots.js';
 export * from './trading-mode.js';
 export * from './order-pricing.js';
 export * from './combo-pricing.js';
+export * from './paper-fill.js';
+export * from './walk-executor.js';
 export * from './broker/advisories.js';
 
 /*
