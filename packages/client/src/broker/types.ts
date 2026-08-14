@@ -143,6 +143,16 @@ export interface OptionContract {
 
   bid: number | null;
   ask: number | null;
+  /**
+   * Contracts resting at each side of the touch.
+   *
+   * Carried because a price without its size is the deception an order ticket
+   * exists to undo: measured on RKLB, the 80P quoted 7.50/7.80 — four cents
+   * wide, reads as a market — with a single contract behind the bid. Selling
+   * ten "at the bid" clears one and fills the rest lower.
+   */
+  bidSize?: number;
+  askSize?: number;
   /** Mid/mark — the price to value a position at. */
   mark: number | null;
   previousClose: number | null;

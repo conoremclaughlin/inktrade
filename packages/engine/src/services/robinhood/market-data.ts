@@ -113,6 +113,12 @@ export function normalizeContract(
     mark: num(q, 'adjusted_mark_price', 'mark_price') ?? null,
     previousClose: num(close ?? {}, 'price') ?? num(q, 'previous_close_price') ?? null,
 
+    // Size was being dropped, which made every depth display render empty
+    // against live data. Optional, because a zero size is meaningful and
+    // absence is not the same thing.
+    ...defined('bidSize', num(q, 'bid_size')),
+    ...defined('askSize', num(q, 'ask_size')),
+
     // Straight from the market rather than computed from a spot price and an
     // IV guess. Left undefined when absent — a zero delta is a real value.
     ...defined('impliedVolatility', num(q, 'implied_volatility')),
