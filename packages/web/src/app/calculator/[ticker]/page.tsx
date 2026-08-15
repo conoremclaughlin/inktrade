@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, Suspense } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
-import { Navbar } from '@/components/navbar';
+import { AppShell } from '@/components/app-shell';
 import { useQuote, useChainGrid, useLeverage, useVolatility, useFundamentals } from '@/lib/hooks';
 import { LeverageChart } from '@/components/calculator/leverage-chart';
 import { LeverageHeatmap, type HeatmapMode } from '@/components/calculator/leverage-heatmap';
@@ -68,9 +68,8 @@ function LoadingBar() {
 
 function CalculatorLoading() {
   return (
-    <div className="min-h-screen bg-void">
-      <Navbar />
-      <main className="pt-24 pb-16 px-4 sm:px-6">
+    <AppShell showWatchlist={false}>
+      <div className="pb-16 px-4 sm:px-6 pt-8">
         <div className="mx-auto max-w-[1400px]">
           <div className="mb-8">
             <h1 className="font-display text-3xl md:text-4xl tracking-[-0.02em] text-text-primary">
@@ -84,8 +83,8 @@ function CalculatorLoading() {
             <LoadingBar />
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
 
@@ -206,10 +205,8 @@ function Calculator({ symbol }: { symbol: string }) {
   }, [quote.data]);
 
   return (
-    <div className="min-h-screen bg-void">
-      <Navbar />
-
-      <main className="pt-24 pb-16 px-4 sm:px-6">
+    <AppShell activeSymbol={symbol} onSymbolClick={(s) => router.push(`/calculator/${s}`)}>
+      <div className="pb-16 px-4 sm:px-6 pt-8">
         <div className="mx-auto max-w-[1400px]">
           {/* Page header */}
           <div className="mb-8 flex items-start justify-between">
@@ -236,9 +233,14 @@ function Calculator({ symbol }: { symbol: string }) {
 
           {/* Top bar: symbol + quote + target + controls */}
           <div className="glass-bright rounded-xl p-5 mb-6">
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_auto_auto] gap-4 items-end">
+            {/*
+              minmax(0,...) rather than a bare 1fr: a bare 1fr floors at its
+              content width, so the two flexible columns refuse to shrink and
+              push the quote off the right edge instead.
+            */}
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto_auto] gap-4 items-end">
               {/* Symbol input */}
-              <div>
+              <div className="min-w-0">
                 <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-text-tertiary mb-2">
                   Underlying
                 </label>
@@ -246,15 +248,15 @@ function Calculator({ symbol }: { symbol: string }) {
               </div>
 
               {/* Target price input */}
-              <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-text-tertiary mb-2">
+              <div className="min-w-0">
+                <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-text-tertiary mb-2 whitespace-nowrap">
                   Price Target
-                  <span className="text-text-muted font-normal normal-case tracking-normal ml-1">
+                  <span className="hidden 2xl:inline text-text-muted font-normal normal-case tracking-normal ml-1">
                     — leverage calculated at this price
                   </span>
                 </label>
-                <div className="flex gap-2">
-                  <div className="flex-1 flex items-center glass rounded-lg px-3">
+                <div className="flex gap-2 min-w-0">
+                  <div className="flex-1 min-w-0 flex items-center glass rounded-lg px-3">
                     <span className="text-text-muted text-[14px] font-mono mr-1">$</span>
                     <input
                       type="number"
@@ -323,11 +325,11 @@ function Calculator({ symbol }: { symbol: string }) {
 
               {/* Quote display */}
               {quote.data && (
-                <div className="text-right">
-                  <div className="text-[22px] font-mono font-bold text-text-primary">
+                <div className="text-right whitespace-nowrap">
+                  <div className="text-[22px] font-mono font-bold text-text-primary tabular-nums">
                     ${quote.data.price.toFixed(2)}
                   </div>
-                  <div className={`text-[13px] font-mono font-medium ${
+                  <div className={`text-[13px] font-mono font-medium tabular-nums ${
                     quote.data.change >= 0 ? 'text-emerald' : 'text-rose'
                   }`}>
                     {quote.data.change >= 0 ? '+' : ''}{quote.data.change.toFixed(2)}{' '}
@@ -713,10 +715,10 @@ function Calculator({ symbol }: { symbol: string }) {
               )}
           </div>
         </div>
-      </main>
+      </div>
 
       <GlossaryPanel open={glossaryOpen} onClose={() => setGlossaryOpen(false)} />
-    </div>
+    </AppShell>
   );
 }
 

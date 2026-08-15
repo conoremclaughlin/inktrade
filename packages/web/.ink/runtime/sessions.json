@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "sessions": [
+    {
+      "pcpSessionId": "d7af9617-6b31-4459-84e7-7dd6307d01ec",
+      "backend": "claude",
+      "agentId": "wren",
+      "runtimeLinkId": "4d827ee0-7c98-47df-87e5-604cab69033c",
+      "updatedAt": "2026-06-16T00:30:23.724Z"
+    },
+    {
+      "pcpSessionId": "ae19769e-3f13-4c34-ae4a-0aa40e3d73a7",
+      "backend": "claude",
+      "agentId": "wren",
+      "runtimeLinkId": "3b0c9914-9881-4a6b-bd43-f07d945a3206",
+      "updatedAt": "2026-08-14T00:57:24.317Z"
+    }
+  ],
+  "current": {
+    "pcpSessionId": "ae19769e-3f13-4c34-ae4a-0aa40e3d73a7",
+    "backend": "claude",
+    "agentId": "wren",
+    "updatedAt": "2026-08-14T00:57:24.318Z"
+  }
+}

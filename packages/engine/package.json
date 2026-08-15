@@ -26,16 +26,27 @@
     "./math": {
       "types": "./dist/math.d.ts",
       "import": "./dist/math.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./services": {
+      "types": "./dist/services/index.d.ts",
+      "import": "./dist/services/index.js"
     }
   },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:live": "vitest run --config vitest.live.config.ts",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@inktrade/client": "workspace:^",
+    "@modelcontextprotocol/client": "^2.0.0",
     "yahoo-finance2": "^3.14.0"
   },
   "devDependencies": {

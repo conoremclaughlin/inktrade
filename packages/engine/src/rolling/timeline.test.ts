@@ -70,9 +70,9 @@ describe('analyzeTargetTimeline', () => {
       });
       const strat = result.strategies[0];
       // holdingPeriod = 90 - 30 = 60
-      // 30 days: ceil(30/60)-1 = 0 rolls
+      // 30 days: floor(30/60) = 0 rolls
       expect(strat.timeline[0].rollsNeeded).toBe(0);
-      // 50 days: ceil(50/60)-1 = 0 rolls
+      // 50 days: floor(50/60) = 0 rolls
       expect(strat.timeline[1].rollsNeeded).toBe(0);
     });
 
@@ -83,8 +83,8 @@ describe('analyzeTargetTimeline', () => {
         rollAtDte: 30,
         timelineDays: [60],
       });
-      // holdingPeriod = 60, days = 60: ceil(60/60)-1 = 0
-      expect(result.strategies[0].timeline[0].rollsNeeded).toBe(0);
+      // holdingPeriod = 60, days = 60: floor(60/60) = 1
+      expect(result.strategies[0].timeline[0].rollsNeeded).toBe(1);
     });
 
     it('one roll when past holding period', () => {
@@ -94,7 +94,7 @@ describe('analyzeTargetTimeline', () => {
         rollAtDte: 30,
         timelineDays: [61],
       });
-      // holdingPeriod = 60, days = 61: ceil(61/60)-1 = 1
+      // holdingPeriod = 60, days = 61: floor(61/60) = 1
       expect(result.strategies[0].timeline[0].rollsNeeded).toBe(1);
     });
 
@@ -105,11 +105,11 @@ describe('analyzeTargetTimeline', () => {
         rollAtDte: 30,
         timelineDays: [180],
       });
-      // holdingPeriod = 60, days = 180: ceil(180/60)-1 = 2
-      expect(result.strategies[0].timeline[0].rollsNeeded).toBe(2);
+      // holdingPeriod = 60, days = 180: floor(180/60) = 3
+      expect(result.strategies[0].timeline[0].rollsNeeded).toBe(3);
     });
 
-    it('roll count formula: ceil(days/holdingPeriod) - 1', () => {
+    it('roll count formula: floor(days/holdingPeriod)', () => {
       const result = analyzeTargetTimeline({
         ...BASE,
         entryDtes: [120],
@@ -119,7 +119,7 @@ describe('analyzeTargetTimeline', () => {
       const holdingPeriod = 120 - 30; // 90
       for (const point of result.strategies[0].timeline) {
         if (!point.reachable) continue;
-        const expected = Math.max(0, Math.ceil(point.daysFromNow / holdingPeriod) - 1);
+        const expected = Math.floor(point.daysFromNow / holdingPeriod);
         expect(point.rollsNeeded).toBe(expected);
       }
     });
@@ -294,7 +294,7 @@ describe('analyzeTargetTimeline', () => {
         timelineDays: [80],
       });
       const point = result.strategies[0].timeline[0];
-      // holdingPeriod = 60, days = 80, rolls = ceil(80/60)-1 = 1
+      // holdingPeriod = 60, days = 80, rolls = floor(80/60) = 1
       // daysSinceLastRoll = 80 - 1*60 = 20
       // remainingDte = 90 - 20 = 70
       expect(point.rollsNeeded).toBe(1);
@@ -312,7 +312,7 @@ describe('analyzeTargetTimeline', () => {
       });
       const point = result.strategies[0].timeline[0];
       // holdingPeriod = 46, days = 60
-      // rolls = ceil(60/46)-1 = 1
+      // rolls = floor(60/46) = 1
       // daysSinceLastRoll = 60 - 46 = 14
       // remainingDte = 60 - 14 = 46
       // This is actually reachable
@@ -384,6 +384,61 @@ describe('analyzeTargetTimeline', () => {
           expect(point.returnPct).toBeCloseTo(computedReturn, 6);
         }
       }
+    });
+  });
+
+  describe('interval roll mode', () => {
+    it('rolls every N days regardless of entry DTE', () => {
+      const result = analyzeTargetTimeline({
+        ...BASE,
+        entryDtes: [120],
+        rollAtDte: 30,
+        rollMode: 'interval',
+        timelineDays: [30, 60, 90, 120, 180],
+      });
+      const strat = result.strategies[0];
+      // holdingPeriod = 30 (fixed interval)
+      expect(strat.timeline[0].rollsNeeded).toBe(1); // 30/30 = 1
+      expect(strat.timeline[1].rollsNeeded).toBe(2); // 60/30 = 2
+      expect(strat.timeline[2].rollsNeeded).toBe(3); // 90/30 = 3
+      expect(strat.timeline[3].rollsNeeded).toBe(4); // 120/30 = 4
+      expect(strat.timeline[4].rollsNeeded).toBe(6); // 180/30 = 6
+    });
+
+    it('interval mode has cheaper per-roll cost for long-dated entries', () => {
+      const dte = analyzeTargetTimeline({
+        ...BASE,
+        entryDtes: [120],
+        rollAtDte: 30,
+        rollMode: 'dte',
+      });
+      const interval = analyzeTargetTimeline({
+        ...BASE,
+        entryDtes: [120],
+        rollAtDte: 30,
+        rollMode: 'interval',
+      });
+      // Interval sells at 90 DTE (more value); DTE sells at 30 DTE (less value)
+      expect(interval.strategies[0].costPerRoll).toBeLessThan(
+        dte.strategies[0].costPerRoll
+      );
+    });
+
+    it('remaining DTE cycles correctly in interval mode', () => {
+      const result = analyzeTargetTimeline({
+        ...BASE,
+        entryDtes: [120],
+        rollAtDte: 30,
+        rollMode: 'interval',
+        timelineDays: [15, 45],
+      });
+      const strat = result.strategies[0];
+      // 15 days in, 0 rolls, 120 - 15 = 105 DTE
+      expect(strat.timeline[0].rollsNeeded).toBe(0);
+      expect(strat.timeline[0].remainingDte).toBe(105);
+      // 45 days in, 1 roll at day 30, 15 days since → 120 - 15 = 105 DTE
+      expect(strat.timeline[1].rollsNeeded).toBe(1);
+      expect(strat.timeline[1].remainingDte).toBe(105);
     });
   });
 });

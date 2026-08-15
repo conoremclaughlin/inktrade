@@ -1,8 +1,18 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { OptionContract, OptionType } from '@inktrade/engine/math';
-import { blackScholesPrice } from '@inktrade/engine/math';
+import type {
+  LeverageBand,
+  OptionContract,
+  OptionType,
+  ProbabilityBand,
+} from '@inktrade/engine/math';
+import {
+  estimateLeverage,
+  leverageBand,
+  probabilityBand,
+  probabilityOfProfit,
+} from '@inktrade/engine/math';
 
 export type HeatmapMode = 'leverage' | 'probability';
 
@@ -21,88 +31,53 @@ interface LeverageHeatmapProps {
   isLoadingExps?: boolean;
 }
 
-function leverageColor(leverage: number): string {
-  if (leverage <= 0) return 'rgba(244, 63, 94, 0.15)';
-  if (leverage < 3) return 'rgba(59, 130, 246, 0.12)';
-  if (leverage < 5) return 'rgba(59, 130, 246, 0.22)';
-  if (leverage < 8) return 'rgba(59, 130, 246, 0.35)';
-  if (leverage < 10) return 'rgba(96, 165, 250, 0.45)';
-  if (leverage < 15) return 'rgba(16, 185, 129, 0.4)';
-  return 'rgba(52, 211, 153, 0.55)';
-}
+/*
+ * The maths lives in @inktrade/engine/math, and so do the band boundaries.
+ * Only the colours are decided here — mobile renders the same bands with its
+ * own tokens, and if "high" meant something different on each platform the
+ * grids would disagree without either looking wrong.
+ */
 
-function leverageTextColor(leverage: number): string {
-  if (leverage <= 0) return 'text-rose';
-  if (leverage < 5) return 'text-text-secondary';
-  if (leverage < 10) return 'text-accent-bright';
-  return 'text-emerald-bright';
-}
+const LEVERAGE_FILL: Record<LeverageBand, string> = {
+  negative: 'rgba(244, 63, 94, 0.15)',
+  minimal: 'rgba(59, 130, 246, 0.12)',
+  low: 'rgba(59, 130, 246, 0.22)',
+  moderate: 'rgba(59, 130, 246, 0.35)',
+  high: 'rgba(96, 165, 250, 0.45)',
+  strong: 'rgba(16, 185, 129, 0.4)',
+  extreme: 'rgba(52, 211, 153, 0.55)',
+};
 
-function probabilityColor(prob: number): string {
-  if (prob >= 0.7) return 'rgba(16, 185, 129, 0.45)';
-  if (prob >= 0.5) return 'rgba(16, 185, 129, 0.3)';
-  if (prob >= 0.35) return 'rgba(59, 130, 246, 0.25)';
-  if (prob >= 0.2) return 'rgba(59, 130, 246, 0.15)';
-  return 'rgba(244, 63, 94, 0.12)';
-}
+const LEVERAGE_TEXT: Record<LeverageBand, string> = {
+  negative: 'text-rose',
+  minimal: 'text-text-secondary',
+  low: 'text-text-secondary',
+  moderate: 'text-accent-bright',
+  high: 'text-accent-bright',
+  strong: 'text-emerald-bright',
+  extreme: 'text-emerald-bright',
+};
 
-function probabilityTextColor(prob: number): string {
-  if (prob >= 0.5) return 'text-emerald-bright';
-  if (prob >= 0.35) return 'text-accent-bright';
-  if (prob >= 0.2) return 'text-text-secondary';
-  return 'text-rose';
-}
+const PROBABILITY_FILL: Record<ProbabilityBand, string> = {
+  remote: 'rgba(244, 63, 94, 0.12)',
+  unlikely: 'rgba(59, 130, 246, 0.15)',
+  even: 'rgba(59, 130, 246, 0.25)',
+  likely: 'rgba(16, 185, 129, 0.3)',
+  strong: 'rgba(16, 185, 129, 0.45)',
+};
 
-function normalCDF(x: number): number {
-  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
-  const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
-  const sign = x < 0 ? -1 : 1;
-  const ax = Math.abs(x);
-  const t = 1.0 / (1.0 + p * ax / Math.SQRT2);
-  const y = 1.0 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-ax * ax / 2);
-  return 0.5 * (1.0 + sign * y);
-}
+const PROBABILITY_TEXT: Record<ProbabilityBand, string> = {
+  remote: 'text-rose',
+  unlikely: 'text-text-secondary',
+  even: 'text-accent-bright',
+  likely: 'text-emerald-bright',
+  strong: 'text-emerald-bright',
+};
 
-function estimateLeverage(contract: OptionContract, underlyingPrice: number, targetPrice: number): number {
-  const optionPrice = contract.mark || contract.last;
-  if (optionPrice <= 0) return 0;
-
-  const stockReturn = (targetPrice - underlyingPrice) / underlyingPrice;
-  if (Math.abs(stockReturn) < 0.001) {
-    const delta = contract.greeks.delta || 0.5;
-    return Math.abs(delta * underlyingPrice / optionPrice);
-  }
-
-  const t = contract.daysToExpiration / 365;
-  if (t <= 0) return 0;
-
-  const iv = contract.greeks.impliedVolatility || 0.3;
-  const type = contract.type === 'call' ? 'call' as const : 'put' as const;
-  const valueAtTarget = blackScholesPrice(targetPrice, contract.strike, t, 0.045, iv, type);
-  const optionReturn = (valueAtTarget - optionPrice) / optionPrice;
-
-  return Math.abs(optionReturn / stockReturn);
-}
-
-function estimateProbabilityOfProfit(
-  contract: OptionContract,
-  underlyingPrice: number,
-  r: number = 0.05,
-): number {
-  const optionPrice = contract.mark || contract.last;
-  const T = contract.daysToExpiration / 365;
-  if (T <= 0 || optionPrice <= 0) return 0;
-
-  const sigma = contract.greeks.impliedVolatility || 0.3;
-  const breakeven = contract.type === 'call'
-    ? contract.strike + optionPrice
-    : contract.strike - optionPrice;
-
-  const d2 = (Math.log(underlyingPrice / breakeven) + (r - 0.5 * sigma * sigma) * T)
-    / (sigma * Math.sqrt(T));
-
-  return contract.type === 'call' ? normalCDF(d2) : normalCDF(-d2);
-}
+const leverageColor = (leverage: number) => LEVERAGE_FILL[leverageBand(leverage)];
+const leverageTextColor = (leverage: number) => LEVERAGE_TEXT[leverageBand(leverage)];
+const probabilityColor = (prob: number) => PROBABILITY_FILL[probabilityBand(prob)];
+const probabilityTextColor = (prob: number) => PROBABILITY_TEXT[probabilityBand(prob)];
 
 export function LeverageHeatmap({
   contracts,
@@ -138,7 +113,7 @@ export function LeverageHeatmap({
     for (const [exp, strikeMap] of expMap) {
       for (const [strike, contract] of strikeMap) {
         const lev = estimateLeverage(contract, underlyingPrice, targetPrice);
-        const prob = estimateProbabilityOfProfit(contract, underlyingPrice);
+        const prob = probabilityOfProfit(contract, underlyingPrice);
         grid.set(`${exp}:${strike}`, { contract, leverage: lev, probability: prob });
       }
     }

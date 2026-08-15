@@ -10,6 +10,7 @@ export type {
 export { analyzeRollingStrategies } from './analyzer.js';
 
 export type {
+  RollMode,
   TimelineParams,
   TimelineAnalysis,
   TimelineStrategy,

@@ -1,6 +1,7 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   Quote,
   OptionChain,
@@ -12,7 +13,7 @@ import type {
   LetfHoldingsData,
   LetfHistoryPoint,
 } from '@inktrade/engine/letf';
-import type { PortfolioAnalysis } from '@inktrade/engine/portfolio';
+import type { PortfolioAnalysis, SpreadProjection } from '@inktrade/engine/portfolio';
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -97,6 +98,8 @@ export function useVolatility(symbol: string | null) {
 
 export interface FundamentalsData {
   symbol: string;
+  financialCurrency: string;
+  exchangeRateToUSD: number | null;
   sharesOutstanding: number;
   marketCap: number;
   trailingEps: number;
@@ -214,8 +217,12 @@ export function useLetfHistory(symbol: string | null, period: string = '1y') {
 
 export interface TickerHistoryPoint {
   date: string;
+  open: number;
+  high: number;
+  low: number;
   close: number;
   cumReturn: number;
+  volume: number;
 }
 
 export interface TickerHistoryResponse {
@@ -236,6 +243,233 @@ export function useTickerHistory(symbol: string | null, period: string = '1y') {
 }
 
 // --- Portfolio analysis ---
+
+// --- OI distribution ---
+
+export interface OIStrike {
+  strike: number;
+  callOI: number;
+  putOI: number;
+  callVolume: number;
+  putVolume: number;
+}
+
+export interface OIDistribution {
+  symbol: string;
+  underlyingPrice: number;
+  expirations: string[];
+  strikes: OIStrike[];
+  maxPainStrike: number;
+  totalCallOI: number;
+  totalPutOI: number;
+  pcRatio: number;
+}
+
+export function useOIDistribution(symbol: string | null, expiry?: string) {
+  const qs = new URLSearchParams();
+  if (symbol) qs.set('symbol', symbol);
+  if (expiry) qs.set('expiry', expiry);
+
+  return useQuery<OIDistribution>({
+    queryKey: ['oi-distribution', symbol, expiry],
+    queryFn: () => fetchJson(`/api/oi-distribution?${qs}`),
+    enabled: !!symbol,
+    staleTime: 60_000,
+  });
+}
+
+// --- Schwab auth ---
+
+export interface SchwabStatus {
+  status: 'unconfigured' | 'disconnected' | 'expired' | 'connected' | 'configured';
+  message?: string;
+  authUrl?: string;
+  provider?: string;
+  credentialSource?: 'env' | 'config';
+  redirectUri?: string;
+  tokenExpiresAt?: number;
+  refreshExpiresAt?: number;
+}
+
+export function useSchwabStatus() {
+  return useQuery<SchwabStatus>({
+    queryKey: ['schwab-status'],
+    queryFn: () => fetchJson('/api/auth/schwab'),
+    staleTime: 30_000,
+  });
+}
+
+export function useSchwabConfigure() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (creds: { appKey: string; appSecret: string; redirectUri?: string }) => {
+      const res = await fetch('/api/auth/schwab', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(creds),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      return res.json() as Promise<SchwabStatus>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['schwab-status'] }),
+  });
+}
+
+export function useSchwabDisconnect() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/auth/schwab', { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to disconnect');
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['schwab-status'] }),
+  });
+}
+
+// --- Robinhood auth ---
+
+export interface RobinhoodStatus {
+  /** 'unavailable' means the loopback rule can't be satisfied from this origin. */
+  status: 'connected' | 'disconnected' | 'unavailable';
+  redirectUri?: string;
+  error?: string;
+}
+
+export function useRobinhoodStatus() {
+  return useQuery<RobinhoodStatus>({
+    queryKey: ['robinhood-status'],
+    // A 400 here is a real answer — the loopback guard reporting that this
+    // origin can never link — so it's read rather than thrown away.
+    queryFn: async () => {
+      const res = await fetch('/api/auth/robinhood');
+      return (await res.json()) as RobinhoodStatus;
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useRobinhoodDisconnect() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/auth/robinhood', { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to disconnect');
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['robinhood-status'] }),
+  });
+}
+
+// --- Portfolio analysis ---
+
+// --- Theta projection ---
+
+export interface ThetaProjectionParams {
+  shortStrike: number;
+  longStrike: number;
+  spotPrice: number;
+  iv: number;
+  currentDte: number;
+  netCreditReceived: number;
+  contracts?: number;
+}
+
+export function useThetaProjection(params: ThetaProjectionParams | null) {
+  const qs = new URLSearchParams();
+  if (params) {
+    qs.set('shortStrike', String(params.shortStrike));
+    qs.set('longStrike', String(params.longStrike));
+    qs.set('spotPrice', String(params.spotPrice));
+    qs.set('iv', String(params.iv));
+    qs.set('currentDte', String(params.currentDte));
+    qs.set('netCreditReceived', String(params.netCreditReceived));
+    if (params.contracts) qs.set('contracts', String(params.contracts));
+  }
+
+  return useQuery<SpreadProjection>({
+    queryKey: ['theta-projection', params],
+    queryFn: () => fetchJson(`/api/theta-projection?${qs}`),
+    enabled: !!params,
+  });
+}
+
+// --- Watchlist ---
+
+import { useUser } from '@/lib/hooks/use-auth';
+
+export function useWatchlistSymbols() {
+  const { isAuthenticated } = useUser();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery<{ symbols: string[] }>({
+    queryKey: ['watchlist'],
+    queryFn: () => fetchJson('/api/watchlist'),
+    enabled: isAuthenticated,
+    staleTime: 60_000,
+  });
+
+  const mutation = useMutation({
+    mutationFn: (symbols: string[]) =>
+      fetch('/api/watchlist', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols }),
+      }).then((r) => {
+        if (!r.ok) throw new Error('Failed to update watchlist');
+        return r.json() as Promise<{ symbols: string[] }>;
+      }),
+    onMutate: async (newSymbols) => {
+      await queryClient.cancelQueries({ queryKey: ['watchlist'] });
+      const previous = queryClient.getQueryData<{ symbols: string[] }>(['watchlist']);
+      queryClient.setQueryData(['watchlist'], { symbols: newSymbols });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(['watchlist'], context.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+    },
+  });
+
+  const symbols = data?.symbols ?? [];
+
+  const setSymbols = useCallback((next: string[] | ((prev: string[]) => string[])) => {
+    const resolved = typeof next === 'function' ? next(symbols) : next;
+    mutation.mutate(resolved);
+  }, [symbols, mutation]);
+
+  const addSymbol = useCallback((sym: string) => {
+    const upper = sym.toUpperCase().trim();
+    if (!upper || symbols.includes(upper)) return;
+    mutation.mutate([...symbols, upper]);
+  }, [symbols, mutation]);
+
+  const removeSymbol = useCallback((sym: string) => {
+    mutation.mutate(symbols.filter((s) => s !== sym.toUpperCase()));
+  }, [symbols, mutation]);
+
+  const moveSymbol = useCallback((from: number, to: number) => {
+    const next = [...symbols];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    mutation.mutate(next);
+  }, [symbols, mutation]);
+
+  return { symbols, setSymbols, addSymbol, removeSymbol, moveSymbol, isLoading };
+}
+
+export function useWatchlistQuotes(symbols: string[]) {
+  const joined = symbols.join(',');
+  return useQuery<{ quotes: Quote[] }>({
+    queryKey: ['watchlist-quotes', joined],
+    queryFn: () => fetchJson(`/api/quotes?symbols=${joined}`),
+    enabled: symbols.length > 0,
+    refetchInterval: 30_000,
+    staleTime: 10_000,
+  });
+}
 
 export function usePortfolioAnalysis(symbols: string[], lookback: string = '1y') {
   const sorted = [...symbols].sort().join(',');

@@ -1,25 +1,28 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
-import {
-  ResponsiveContainer,
-  ComposedChart,
-  Area,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Bar,
-} from 'recharts';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Navbar } from '@/components/navbar';
-import { useQuote, useTickerHistory, type TickerHistoryResponse } from '@/lib/hooks';
+import { AppShell } from '@/components/app-shell';
+import { TradingChart } from '@/components/stock/trading-chart';
+import { OIDistributionChart } from '@/components/stock/oi-chart';
+import { OrderActivityPanel } from '@/components/stock/order-activity';
+import { LevelsPanel } from '@/components/stock/levels-panel';
+import { OscillatorPanel } from '@/components/stock/oscillator-panel';
+import { ThetaDecayChart } from '@/components/stock/theta-decay-chart';
+import { HISTORY_PERIODS, type HistoryPeriod } from '@inktrade/client';
+import { EarningsLine } from '@/components/earnings-badge';
+import { useQuote, useTickerHistory } from '@/lib/hooks';
+import { useEarnings } from '@/lib/broker-hooks';
 
-const PERIODS = ['1M', '3M', '6M', '1Y', '2Y', '5Y'] as const;
-const PERIOD_MAP: Record<string, string> = {
-  '1M': '1mo', '3M': '3mo', '6M': '6mo', '1Y': '1y', '2Y': '2y', '5Y': '5y',
-};
+/*
+ * Periods come from @inktrade/client rather than a local table.
+ *
+ * There used to be two: a display list here and a lookup in the history lib,
+ * keyed '1m'/'3m'/'6m' against this file's '1mo'/'3mo'/'6mo'. Three of the six
+ * buttons therefore missed the lookup, fell through to the default, and served
+ * a year of bars whichever you pressed. One list, shared with mobile, is the
+ * fix that keeps it fixed.
+ */
 
 const POPULAR = [
   { symbol: 'SPY', label: 'S&P 500' },
@@ -36,151 +39,11 @@ function formatPct(n: number): string {
   return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 }
 
-function formatLargeNumber(n: number): string {
-  const abs = Math.abs(n);
-  if (abs >= 1e12) return `$${(n / 1e12).toFixed(1)}T`;
-  if (abs >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
-  if (abs >= 1e6) return `$${(n / 1e6).toFixed(0)}M`;
-  return `$${n.toLocaleString()}`;
-}
-
-function PriceChart({ data, symbol }: { data: TickerHistoryResponse; symbol: string }) {
-  const chartData = useMemo(() => {
-    return data.points.map((p) => ({
-      date: p.date,
-      close: p.close,
-      cumReturn: p.cumReturn,
-    }));
-  }, [data.points]);
-
-  const isPositive = data.totalReturn >= 0;
-
-  return (
-    <div className="space-y-4">
-      {/* Return stats */}
-      <div className="flex items-center gap-6 flex-wrap text-[12px] font-mono">
-        <div className="flex items-center gap-1.5">
-          <span className="text-text-muted">Return:</span>
-          <span className={`font-medium ${isPositive ? 'text-emerald' : 'text-rose'}`}>
-            {formatPct(data.totalReturn)}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-text-muted">Annualized:</span>
-          <span className={`font-medium ${data.annualizedReturn >= 0 ? 'text-emerald' : 'text-rose'}`}>
-            {formatPct(data.annualizedReturn)}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-text-muted">Max Drawdown:</span>
-          <span className="font-medium text-rose">-{data.maxDrawdownPct.toFixed(1)}%</span>
-        </div>
-      </div>
-
-      {/* Chart */}
-      <div className="w-full h-[400px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 30, bottom: 10, left: 10 }}>
-            <defs>
-              <linearGradient id="returnGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={isPositive ? '#10b981' : '#f43f5e'} stopOpacity={0.15} />
-                <stop offset="100%" stopColor={isPositive ? '#10b981' : '#f43f5e'} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-
-            <CartesianGrid strokeDasharray="4 4" stroke="var(--color-border-subtle)" vertical={false} />
-
-            <XAxis
-              dataKey="date"
-              tickFormatter={(v: string) => {
-                const d = new Date(v);
-                return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-              }}
-              tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--color-text-muted)' }}
-              axisLine={{ stroke: 'var(--color-border-subtle)' }}
-              tickLine={false}
-              minTickGap={40}
-            />
-
-            <YAxis
-              yAxisId="price"
-              orientation="right"
-              tickFormatter={(v: number) => `$${v.toFixed(0)}`}
-              tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--color-text-muted)' }}
-              axisLine={false}
-              tickLine={false}
-              width={60}
-            />
-
-            <YAxis
-              yAxisId="return"
-              orientation="left"
-              tickFormatter={(v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(0)}%`}
-              tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--color-text-muted)' }}
-              axisLine={false}
-              tickLine={false}
-              width={55}
-            />
-
-            <Tooltip
-              content={({ active, payload }) => {
-                if (!active || !payload?.length) return null;
-                const d = payload[0]?.payload as (typeof chartData)[0];
-                if (!d) return null;
-                const dateStr = new Date(d.date).toLocaleDateString('en-US', {
-                  month: 'short', day: 'numeric', year: 'numeric',
-                });
-                return (
-                  <div className="bg-[#0f1629]/95 backdrop-blur-md rounded-lg px-3 py-2 shadow-xl border border-border-subtle">
-                    <div className="text-[10px] font-mono text-text-secondary mb-1">{dateStr}</div>
-                    <div className="text-[12px] font-mono text-text-primary font-medium">
-                      {symbol}: ${d.close.toFixed(2)}
-                    </div>
-                    <div className={`text-[12px] font-mono font-medium ${d.cumReturn >= 0 ? 'text-emerald' : 'text-rose'}`}>
-                      {formatPct(d.cumReturn)}
-                    </div>
-                  </div>
-                );
-              }}
-            />
-
-            <Area
-              yAxisId="return"
-              type="monotone"
-              dataKey="cumReturn"
-              stroke="none"
-              fill="url(#returnGrad)"
-              fillOpacity={1}
-            />
-
-            <Line
-              yAxisId="price"
-              type="monotone"
-              dataKey="close"
-              stroke={isPositive ? '#10b981' : '#f43f5e'}
-              strokeWidth={2}
-              dot={false}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Legend */}
-      <div className="flex items-center gap-5 flex-wrap">
-        <div className="flex items-center gap-1.5">
-          <div className={`w-4 h-0.5 rounded-full ${isPositive ? 'bg-emerald' : 'bg-rose'}`} />
-          <span className="text-[10px] text-text-tertiary">Price</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className={`w-3 h-3 rounded-sm ${isPositive ? 'bg-emerald' : 'bg-rose'} opacity-15`} />
-          <span className="text-[10px] text-text-tertiary">Cumulative Return</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function StockPage() {
+/**
+ * useSearchParams opts its subtree out of prerendering, so the page body sits
+ * behind a Suspense boundary — see the default export below.
+ */
+function StockContent() {
   const searchParams = useSearchParams();
 
   const [symbol, setSymbol] = useState(
@@ -189,20 +52,24 @@ export default function StockPage() {
   const [input, setInput] = useState(
     () => searchParams.get('symbol')?.toUpperCase() || 'SPY'
   );
-  const [period, setPeriod] = useState<string>(
-    () => searchParams.get('period')?.toUpperCase() || '1Y'
-  );
+  const [period, setPeriod] = useState<HistoryPeriod>(() => {
+    const raw = searchParams.get('period')?.toLowerCase();
+    return HISTORY_PERIODS.some((p) => p.value === raw) ? (raw as HistoryPeriod) : '1y';
+  });
 
   useEffect(() => {
     const params = new URLSearchParams();
     if (symbol !== 'SPY') params.set('symbol', symbol);
-    if (period !== '1Y') params.set('period', period);
+    if (period !== '1y') params.set('period', period);
     const qs = params.toString();
     window.history.replaceState(null, '', `/stock${qs ? `?${qs}` : ''}`);
   }, [symbol, period]);
 
   const quote = useQuote(symbol);
-  const history = useTickerHistory(symbol, PERIOD_MAP[period] ?? '1y');
+  const history = useTickerHistory(symbol, period);
+  const periodLabel = HISTORY_PERIODS.find((p) => p.value === period)?.label ?? period;
+  const { data: earningsData } = useEarnings([symbol]);
+  const earnings = earningsData?.earnings.find((e) => e.symbol === symbol) ?? null;
 
   const handleSubmit = (s?: string) => {
     const val = (s ?? input).trim().toUpperCase();
@@ -213,10 +80,8 @@ export default function StockPage() {
   };
 
   return (
-    <div className="min-h-screen bg-void">
-      <Navbar />
-
-      <main className="pt-24 pb-16 px-4 sm:px-6">
+    <AppShell activeSymbol={symbol} onSymbolClick={handleSubmit}>
+      <div className="pb-16 px-4 sm:px-6 pt-8">
         <div className="mx-auto max-w-[1200px]">
           {/* Header */}
           <div className="mb-8">
@@ -269,9 +134,34 @@ export default function StockPage() {
                   }`}>
                     {quote.data.change >= 0 ? '+' : ''}{quote.data.change.toFixed(2)}{' '}
                     ({quote.data.changePercent >= 0 ? '+' : ''}{quote.data.changePercent.toFixed(2)}%)
+                    <span className="ml-1.5 text-text-tertiary font-normal">today</span>
                   </div>
+                  {/*
+                    The selected period's return, beside the price rather than
+                    in the stats grid below a 500px chart. Changing the period
+                    used to change only the picture; the number next to it kept
+                    describing today, which is the one span you did not ask for.
+                  */}
+                  {history.data && (
+                    <div className={`text-[13px] font-mono font-medium ${
+                      history.data.totalReturn >= 0 ? 'text-emerald' : 'text-rose'
+                    }`}>
+                      {history.data.totalReturn >= 0 ? '+' : ''}
+                      {history.data.totalReturn.toFixed(2)}%
+                      <span className="ml-1.5 text-text-tertiary font-normal">{periodLabel}</span>
+                    </div>
+                  )}
                 </div>
               )}
+            </div>
+
+            {/*
+              Next report, on the symbol's own page. Renders nothing when the
+              date is more than two months out or the symbol has none — an ETF
+              shouldn't carry an empty earnings row.
+            */}
+            <div className="mt-4">
+              <EarningsLine earnings={earnings} asOf={earningsData?.asOf ?? ''} />
             </div>
 
             {/* Quick picks */}
@@ -305,24 +195,24 @@ export default function StockPage() {
                 </p>
               </div>
               <div className="flex gap-1 glass rounded-lg p-0.5">
-                {PERIODS.map((p) => (
+                {HISTORY_PERIODS.map((p) => (
                   <button
-                    key={p}
-                    onClick={() => setPeriod(p)}
+                    key={p.value}
+                    onClick={() => setPeriod(p.value)}
                     className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-medium transition-all ${
-                      period === p
+                      period === p.value
                         ? 'bg-accent/15 text-accent-bright border border-accent/30'
                         : 'text-text-muted hover:text-text-secondary'
                     }`}
                   >
-                    {p}
+                    {p.label}
                   </button>
                 ))}
               </div>
             </div>
             <div className="p-4">
               {history.data ? (
-                <PriceChart data={history.data} symbol={symbol} />
+                <TradingChart data={history.data} symbol={symbol} height={500} />
               ) : history.isLoading ? (
                 <div className="flex items-center justify-center h-[400px]">
                   <div className="text-center">
@@ -402,8 +292,80 @@ export default function StockPage() {
               </div>
             </div>
           )}
+
+          {/*
+            Your own orders in this name, above the market-wide charts: what
+            you did matters more than what everyone else did.
+          */}
+          {/*
+            Directly under price, because an oscillator is read against the
+            bars above it — scrolling between the two would defeat the point.
+          */}
+          {history.data && (
+            <div className="mt-6">
+              <OscillatorPanel points={history.data.points} />
+            </div>
+          )}
+
+          {/*
+            Levels read as a summary of the chart above, so they sit directly
+            under it — before your own orders and well before the market-wide
+            open-interest charts.
+          */}
+          {history.data && (
+            <div className="mt-6">
+              <LevelsPanel
+                points={history.data.points}
+                price={history.data.points[history.data.points.length - 1]?.close ?? null}
+              />
+            </div>
+          )}
+
+          <div className="mt-6">
+            <OrderActivityPanel symbol={symbol} />
+          </div>
+
+          {/* Theta Decay Projection */}
+          {quote.data && (
+            <div className="glass-bright rounded-xl overflow-hidden mt-6">
+              <div className="px-5 py-3 border-b border-border-subtle">
+                <h2 className="text-[14px] font-semibold text-text-primary">
+                  {symbol} — Credit Spread Theta Decay
+                </h2>
+                <p className="text-[11px] text-text-tertiary mt-0.5">
+                  Close or hold? Project daily theta gain vs gamma risk through expiration
+                </p>
+              </div>
+              <div className="p-4">
+                <ThetaDecayChart spotPrice={quote.data.price} />
+              </div>
+            </div>
+          )}
+
+          {/* OI Distribution */}
+          <div className="glass-bright rounded-xl overflow-hidden mt-6">
+            <div className="px-5 py-3 border-b border-border-subtle">
+              <h2 className="text-[14px] font-semibold text-text-primary">
+                {symbol} — Options Open Interest
+              </h2>
+              <p className="text-[11px] text-text-tertiary mt-0.5">
+                Call and put positioning by strike — see where the market is concentrated
+              </p>
+            </div>
+            <div className="p-4">
+              <OIDistributionChart symbol={symbol} />
+            </div>
+          </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </AppShell>
+  );
+}
+
+export default function StockPage() {
+  return (
+    <Suspense fallback={null}>
+      <StockContent />
+    </Suspense>
   );
 }

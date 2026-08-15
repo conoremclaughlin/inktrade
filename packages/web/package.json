@@ -5,14 +5,20 @@
   "description": "Inktrade web application",
   "scripts": {
     "dev": "next dev -p 6001",
+    "dev:https": "next dev -p 6001 --experimental-https",
     "build": "next build",
     "start": "next start -p 6001",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@inktrade/client": "workspace:^",
     "@inktrade/engine": "workspace:^",
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.49.8",
     "@tanstack/react-query": "^5.62.0",
+    "lightweight-charts": "^5.2.0",
     "next": "^16.2.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -27,6 +33,7 @@
     "@types/react-is": "^19",
     "postcss": "^8.5.0",
     "tailwindcss": "^4.1.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.6"
   }
 }

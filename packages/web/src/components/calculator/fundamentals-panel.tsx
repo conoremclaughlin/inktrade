@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -12,6 +12,7 @@ import {
   Tooltip,
 } from 'recharts';
 import type { FundamentalsData } from '@/lib/hooks';
+import { currencySymbol, formatLargeNumber } from '@/lib/format';
 
 interface FundamentalsPanelProps {
   data: FundamentalsData;
@@ -26,15 +27,6 @@ function formatQuarter(dateStr: string): string {
   return `Q${q}'${y}`;
 }
 
-function formatLargeNumber(n: number): string {
-  const abs = Math.abs(n);
-  const sign = n < 0 ? '-' : '';
-  if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T`;
-  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(0)}M`;
-  return `$${n.toLocaleString()}`;
-}
-
 function daysUntil(dateStr: string): number {
   return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86_400_000);
 }
@@ -44,40 +36,80 @@ export function FundamentalsPanel({
   targetPrice,
   symbol,
 }: FundamentalsPanelProps) {
+  const fc = data.financialCurrency ?? 'USD';
+  const fxRate = data.exchangeRateToUSD;
+  const canConvert = fc !== 'USD' && fxRate != null;
+  const [showUSD, setShowUSD] = useState(false);
+
+  const activeCurrency = showUSD && canConvert ? 'USD' : fc;
+  const fcs = currencySymbol(activeCurrency);
+  const convert = (n: number) => showUSD && fxRate != null ? n * fxRate : n;
+  const fmt = (n: number) => formatLargeNumber(convert(n), activeCurrency);
+
+  const displayQuarters = useMemo(() => data.quarters.slice(-6), [data.quarters]);
+
   const incomeData = useMemo(
-    () =>
-      data.quarters.map((q) => ({
+    () => {
+      const c = (n: number) => showUSD && fxRate != null ? n * fxRate : n;
+      return displayQuarters.map((q) => ({
         label: formatQuarter(q.endDate),
-        revenue: q.revenue,
-        grossProfit: q.grossProfit,
-        operatingIncome: q.operatingIncome,
-        netIncome: q.netIncome,
-        freeCashFlow: q.freeCashFlow,
+        revenue: c(q.revenue),
+        grossProfit: c(q.grossProfit),
+        operatingIncome: c(q.operatingIncome),
+        netIncome: c(q.netIncome),
+        freeCashFlow: c(q.freeCashFlow),
         grossMarginPct: +q.grossMarginPct.toFixed(1),
-        eps: q.eps,
-      })),
-    [data.quarters],
+        eps: c(q.eps),
+      }));
+    },
+    [displayQuarters, showUSD, fxRate],
   );
 
   const balanceData = useMemo(
-    () =>
-      data.quarters
+    () => {
+      const c = (n: number) => showUSD && fxRate != null ? n * fxRate : n;
+      return displayQuarters
         .filter((q) => q.totalAssets > 0)
         .map((q) => ({
           label: formatQuarter(q.endDate),
-          totalAssets: q.totalAssets,
-          totalEquity: q.totalEquity,
-          totalDebt: q.totalDebt,
-          cash: q.cash,
+          totalAssets: c(q.totalAssets),
+          totalEquity: c(q.totalEquity),
+          totalDebt: c(q.totalDebt),
+          cash: c(q.cash),
           currentRatio: q.currentLiabilities > 0 ? +(q.currentAssets / q.currentLiabilities).toFixed(2) : 0,
-        })),
-    [data.quarters],
+        }));
+    },
+    [displayQuarters, showUSD, fxRate],
   );
 
+  const yoyData = useMemo(() => {
+    const allQs = data.quarters;
+    return displayQuarters.map((q) => {
+      const qDate = new Date(q.endDate);
+      const targetYear = qDate.getFullYear() - 1;
+      const prev = allQs.find((p) => {
+        const pDate = new Date(p.endDate);
+        return pDate.getFullYear() === targetYear && Math.abs(pDate.getMonth() - qDate.getMonth()) <= 1;
+      });
+      if (!prev) return null;
+      const pct = (curr: number, old: number) => old !== 0 ? ((curr / old) - 1) * 100 : null;
+      return {
+        label: formatQuarter(q.endDate),
+        revenue: pct(q.revenue, prev.revenue),
+        grossProfit: pct(q.grossProfit, prev.grossProfit),
+        netIncome: pct(q.netIncome, prev.netIncome),
+        eps: pct(q.eps, prev.eps),
+        grossMarginPct: q.grossMarginPct,
+        prevGrossMarginPct: prev.grossMarginPct,
+        marginDelta: q.grossMarginPct - prev.grossMarginPct,
+      };
+    });
+  }, [data.quarters, displayQuarters]);
+
   const { ttmRevenue, latestNetMarginPct, runRateEps, runRatePe } = useMemo(() => {
-    const last4 = data.quarters.slice(-4);
+    const last4 = displayQuarters.slice(-4);
     const rev = last4.reduce((sum, q) => sum + q.revenue, 0);
-    const latest = data.quarters[data.quarters.length - 1];
+    const latest = displayQuarters[displayQuarters.length - 1];
     if (!latest || data.sharesOutstanding <= 0) {
       return { ttmRevenue: rev, latestNetMarginPct: 0, runRateEps: 0, runRatePe: null as number | null };
     }
@@ -87,7 +119,7 @@ export function FundamentalsPanel({
     const currentPrice = data.marketCap / data.sharesOutstanding;
     const pe = eps > 0 ? currentPrice / eps : null;
     return { ttmRevenue: rev, latestNetMarginPct: latestMargin, runRateEps: eps, runRatePe: pe };
-  }, [data.quarters, data.sharesOutstanding, data.marketCap]);
+  }, [displayQuarters, data.sharesOutstanding, data.marketCap]);
 
   const targetMarketCap =
     targetPrice !== null ? targetPrice * data.sharesOutstanding : null;
@@ -107,11 +139,6 @@ export function FundamentalsPanel({
   const targetCurrentFyPe =
     targetPrice !== null && data.currentFyEps > 0
       ? targetPrice / data.currentFyEps
-      : null;
-
-  const targetNextFyPe =
-    targetPrice !== null && data.nextFyEps > 0
-      ? targetPrice / data.nextFyEps
       : null;
 
   const { earnings } = data;
@@ -159,10 +186,10 @@ export function FundamentalsPanel({
                       Rev Est.
                     </div>
                     <div className="text-[14px] font-mono font-bold text-text-primary">
-                      {formatLargeNumber(earnings.revenueEstimate.avg)}
+                      {fmt(earnings.revenueEstimate.avg)}
                     </div>
                     <div className="text-[10px] font-mono text-text-tertiary">
-                      {formatLargeNumber(earnings.revenueEstimate.low)} – {formatLargeNumber(earnings.revenueEstimate.high)}
+                      {fmt(earnings.revenueEstimate.low)} – {fmt(earnings.revenueEstimate.high)}
                     </div>
                   </div>
                 )}
@@ -251,22 +278,7 @@ export function FundamentalsPanel({
             {data.currentFyPe ? `${data.currentFyPe.toFixed(1)}x` : '—'}
           </div>
           <div className="text-[10px] font-mono text-text-tertiary mt-0.5">
-            FY Est. ${data.currentFyEps.toFixed(2)}
-          </div>
-        </div>
-
-        <div className="glass rounded-lg px-3 py-2.5">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
-            Next FY P/E
-          </div>
-          <div className="text-[16px] font-mono font-bold text-[#a78bfa]">
-            {data.nextFyPe ? `${data.nextFyPe.toFixed(1)}x` : '—'}
-          </div>
-          <div className="text-[10px] font-mono text-text-tertiary mt-0.5">
-            +1Y Est. ${data.nextFyEps.toFixed(2)}
-            {data.nextFyGrowth != null && (
-              <span className="text-emerald ml-1">+{(data.nextFyGrowth * 100).toFixed(0)}%</span>
-            )}
+            NTM Est. ${data.currentFyEps.toFixed(2)}
           </div>
         </div>
 
@@ -316,10 +328,7 @@ export function FundamentalsPanel({
             <><span className="font-mono font-medium text-[#f59e0b]">Run-Rate {runRatePe.toFixed(1)}x</span> — latest quarter&apos;s net income annualized (×4) at {latestNetMarginPct.toFixed(1)}% net margin → ${runRateEps.toFixed(2)} EPS. What you&apos;re paying if current profitability holds. </>
           )}
           {data.currentFyPe !== null && (
-            <><span className="font-mono font-medium text-accent-bright">Forward {data.currentFyPe.toFixed(1)}x</span> — analyst consensus for the current fiscal year (${data.currentFyEps.toFixed(2)} EPS{data.currentFyGrowth != null ? `, +${(data.currentFyGrowth * 100).toFixed(0)}% YoY` : ''}).</>
-          )}
-          {data.nextFyPe !== null && (
-            <><span className="font-mono font-medium text-[#a78bfa]">Next FY {data.nextFyPe.toFixed(1)}x</span> — analyst consensus for the following fiscal year (${data.nextFyEps.toFixed(2)} EPS{data.nextFyGrowth != null ? `, +${(data.nextFyGrowth * 100).toFixed(0)}% growth` : ''}). Further out and less certain.</>
+            <><span className="font-mono font-medium text-accent-bright">Forward {data.currentFyPe.toFixed(1)}x</span> — next-twelve-months (NTM) rolling consensus EPS estimate (${data.currentFyEps.toFixed(2)}). </>
           )}
         </p>
         {data.currentFyPe !== null && runRatePe !== null && Math.abs(data.currentFyPe - runRatePe) > 0.5 && (
@@ -332,8 +341,7 @@ export function FundamentalsPanel({
         )}
         {targetCurrentFyPe !== null && runRateEps > 0 && (
           <p className="text-[12px] text-text-secondary leading-relaxed mt-1.5">
-            At ${targetPrice?.toFixed(0)} target: forward P/E <span className="font-mono font-medium text-text-primary">{targetCurrentFyPe.toFixed(1)}x</span>, run-rate P/E <span className="font-mono font-medium text-text-primary">{(targetPrice! / runRateEps).toFixed(1)}x</span>
-            {targetNextFyPe !== null && <>, next FY P/E <span className="font-mono font-medium text-text-primary">{targetNextFyPe.toFixed(1)}x</span></>}.
+            At ${targetPrice?.toFixed(0)} target: forward P/E <span className="font-mono font-medium text-text-primary">{targetCurrentFyPe.toFixed(1)}x</span>, run-rate P/E <span className="font-mono font-medium text-text-primary">{(targetPrice! / runRateEps).toFixed(1)}x</span>.
           </p>
         )}
       </div>
@@ -341,9 +349,31 @@ export function FundamentalsPanel({
       {/* Income statement chart */}
       <div className="rounded-xl border border-border-subtle bg-deep/30 p-4">
         <div className="mb-3">
-          <h3 className="text-[13px] font-semibold text-text-primary">
-            Income Statement — {symbol}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-[13px] font-semibold text-text-primary">
+              Income Statement — {symbol}
+            </h3>
+            {canConvert && (
+              <div className="flex gap-0.5 glass rounded-md p-0.5">
+                <button
+                  onClick={() => setShowUSD(false)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium transition-all ${
+                    !showUSD ? 'bg-accent/15 text-accent-bright border border-accent/30' : 'text-text-muted hover:text-text-secondary'
+                  }`}
+                >
+                  {fc}
+                </button>
+                <button
+                  onClick={() => setShowUSD(true)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium transition-all ${
+                    showUSD ? 'bg-accent/15 text-accent-bright border border-accent/30' : 'text-text-muted hover:text-text-secondary'
+                  }`}
+                >
+                  USD
+                </button>
+              </div>
+            )}
+          </div>
           <p className="text-[11px] text-text-tertiary mt-0.5">
             Revenue, gross profit, operating income, net income, FCF (bars) · EPS (line)
           </p>
@@ -368,20 +398,20 @@ export function FundamentalsPanel({
                 yAxisId="left"
                 tickFormatter={(v: number) => {
                   const abs = Math.abs(v);
-                  if (abs >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
-                  if (abs >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
-                  return `$${v}`;
+                  if (abs >= 1e9) return `${fcs}${(v / 1e9).toFixed(1)}B`;
+                  if (abs >= 1e6) return `${fcs}${(v / 1e6).toFixed(0)}M`;
+                  return `${fcs}${v}`;
                 }}
                 tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--color-text-muted)' }}
                 axisLine={false}
                 tickLine={false}
-                width={60}
+                width={70}
               />
 
               <YAxis
                 yAxisId="right"
                 orientation="right"
-                tickFormatter={(v: number) => `$${v.toFixed(0)}`}
+                tickFormatter={(v: number) => `${fcs}${v.toFixed(0)}`}
                 tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--color-text-muted)' }}
                 axisLine={false}
                 tickLine={false}
@@ -396,12 +426,12 @@ export function FundamentalsPanel({
                   return (
                     <div className="bg-[#0f1629]/95 backdrop-blur-md rounded-lg px-3 py-2 shadow-xl border border-border-subtle">
                       <div className="text-[10px] font-mono text-text-secondary mb-1">{d.label}</div>
-                      <div className="text-[12px] font-mono"><span className="text-[#60a5fa]">Revenue:</span> {formatLargeNumber(d.revenue)}</div>
-                      <div className="text-[12px] font-mono"><span className="text-[#38bdf8]">Gross Profit:</span> {formatLargeNumber(d.grossProfit)}</div>
-                      <div className="text-[12px] font-mono"><span className="text-[#22d3ee]">Operating Inc:</span> {formatLargeNumber(d.operatingIncome)}</div>
-                      <div className="text-[12px] font-mono"><span className={d.netIncome >= 0 ? 'text-[#10b981]' : 'text-[#f43f5e]'}>Net Income:</span> {formatLargeNumber(d.netIncome)}</div>
-                      <div className="text-[12px] font-mono"><span className={d.freeCashFlow >= 0 ? 'text-[#f59e0b]' : 'text-[#f43f5e]'}>FCF:</span> {formatLargeNumber(d.freeCashFlow)}</div>
-                      <div className="text-[12px] font-mono"><span className="text-[#a78bfa]">EPS:</span> ${d.eps.toFixed(2)}</div>
+                      <div className="text-[12px] font-mono"><span className="text-[#60a5fa]">Revenue:</span> {formatLargeNumber(d.revenue, activeCurrency)}</div>
+                      <div className="text-[12px] font-mono"><span className="text-[#38bdf8]">Gross Profit:</span> {formatLargeNumber(d.grossProfit, activeCurrency)}</div>
+                      <div className="text-[12px] font-mono"><span className="text-[#22d3ee]">Operating Inc:</span> {formatLargeNumber(d.operatingIncome, activeCurrency)}</div>
+                      <div className="text-[12px] font-mono"><span className={d.netIncome >= 0 ? 'text-[#10b981]' : 'text-[#f43f5e]'}>Net Income:</span> {formatLargeNumber(d.netIncome, activeCurrency)}</div>
+                      <div className="text-[12px] font-mono"><span className={d.freeCashFlow >= 0 ? 'text-[#f59e0b]' : 'text-[#f43f5e]'}>FCF:</span> {formatLargeNumber(d.freeCashFlow, activeCurrency)}</div>
+                      <div className="text-[12px] font-mono"><span className="text-[#a78bfa]">EPS:</span> {fcs}{d.eps.toFixed(2)}</div>
                       <div className="text-[11px] font-mono text-text-secondary mt-1">Gross Margin: {d.grossMarginPct}%</div>
                     </div>
                   );
@@ -444,6 +474,55 @@ export function FundamentalsPanel({
             <span className="text-[10px] text-text-tertiary">EPS</span>
           </div>
         </div>
+
+        {/* YoY growth table */}
+        {yoyData.some((d) => d !== null) && (
+          <div className="mt-4 border-t border-border-subtle pt-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted mb-2">
+              Year-over-Year Growth
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px] font-mono">
+                <thead>
+                  <tr className="text-text-muted">
+                    <th className="text-left font-medium pb-1.5 pr-3">Quarter</th>
+                    <th className="text-right font-medium pb-1.5 px-2">Revenue</th>
+                    <th className="text-right font-medium pb-1.5 px-2">Gross Profit</th>
+                    <th className="text-right font-medium pb-1.5 px-2">Net Income</th>
+                    <th className="text-right font-medium pb-1.5 px-2">EPS</th>
+                    <th className="text-right font-medium pb-1.5 pl-2">Gross Margin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {yoyData.map((d, i) => {
+                    if (!d) return null;
+                    const fmtPct = (v: number | null) => {
+                      if (v === null) return <span className="text-text-tertiary">—</span>;
+                      const color = v > 0 ? 'text-emerald' : v < 0 ? 'text-rose' : 'text-text-secondary';
+                      return <span className={color}>{v > 0 ? '+' : ''}{v.toFixed(1)}%</span>;
+                    };
+                    return (
+                      <tr key={i} className="border-t border-border-subtle/50">
+                        <td className="text-text-secondary py-1.5 pr-3">{d.label}</td>
+                        <td className="text-right py-1.5 px-2">{fmtPct(d.revenue)}</td>
+                        <td className="text-right py-1.5 px-2">{fmtPct(d.grossProfit)}</td>
+                        <td className="text-right py-1.5 px-2">{fmtPct(d.netIncome)}</td>
+                        <td className="text-right py-1.5 px-2">{fmtPct(d.eps)}</td>
+                        <td className="text-right py-1.5 pl-2">
+                          <span className="text-text-secondary">{d.grossMarginPct.toFixed(1)}%</span>
+                          {' '}
+                          <span className={`text-[10px] ${d.marginDelta > 0 ? 'text-emerald' : d.marginDelta < 0 ? 'text-rose' : 'text-text-tertiary'}`}>
+                            ({d.marginDelta > 0 ? '+' : ''}{d.marginDelta.toFixed(1)}pp)
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Balance sheet chart */}
@@ -452,6 +531,11 @@ export function FundamentalsPanel({
           <div className="mb-3">
             <h3 className="text-[13px] font-semibold text-text-primary">
               Balance Sheet — {symbol}
+              {canConvert && (
+                <span className="ml-2 text-[10px] font-mono text-text-tertiary">
+                  {showUSD ? 'USD' : fc}
+                </span>
+              )}
             </h3>
             <p className="text-[11px] text-text-tertiary mt-0.5">
               Total assets, equity, debt, and cash · Current ratio (line)
@@ -477,14 +561,14 @@ export function FundamentalsPanel({
                   yAxisId="left"
                   tickFormatter={(v: number) => {
                     const abs = Math.abs(v);
-                    if (abs >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
-                    if (abs >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
-                    return `$${v}`;
+                    if (abs >= 1e9) return `${fcs}${(v / 1e9).toFixed(1)}B`;
+                    if (abs >= 1e6) return `${fcs}${(v / 1e6).toFixed(0)}M`;
+                    return `${fcs}${v}`;
                   }}
                   tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--color-text-muted)' }}
                   axisLine={false}
                   tickLine={false}
-                  width={60}
+                  width={70}
                 />
 
                 <YAxis
@@ -505,10 +589,10 @@ export function FundamentalsPanel({
                     return (
                       <div className="bg-[#0f1629]/95 backdrop-blur-md rounded-lg px-3 py-2 shadow-xl border border-border-subtle">
                         <div className="text-[10px] font-mono text-text-secondary mb-1">{d.label}</div>
-                        <div className="text-[12px] font-mono"><span className="text-[#60a5fa]">Assets:</span> {formatLargeNumber(d.totalAssets)}</div>
-                        <div className="text-[12px] font-mono"><span className="text-[#10b981]">Equity:</span> {formatLargeNumber(d.totalEquity)}</div>
-                        <div className="text-[12px] font-mono"><span className="text-[#f43f5e]">Debt:</span> {formatLargeNumber(d.totalDebt)}</div>
-                        <div className="text-[12px] font-mono"><span className="text-[#fbbf24]">Cash:</span> {formatLargeNumber(d.cash)}</div>
+                        <div className="text-[12px] font-mono"><span className="text-[#60a5fa]">Assets:</span> {formatLargeNumber(d.totalAssets, activeCurrency)}</div>
+                        <div className="text-[12px] font-mono"><span className="text-[#10b981]">Equity:</span> {formatLargeNumber(d.totalEquity, activeCurrency)}</div>
+                        <div className="text-[12px] font-mono"><span className="text-[#f43f5e]">Debt:</span> {formatLargeNumber(d.totalDebt, activeCurrency)}</div>
+                        <div className="text-[12px] font-mono"><span className="text-[#fbbf24]">Cash:</span> {formatLargeNumber(d.cash, activeCurrency)}</div>
                         <div className="text-[12px] font-mono"><span className="text-[#a78bfa]">Current Ratio:</span> {d.currentRatio}x</div>
                       </div>
                     );

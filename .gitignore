@@ -42,3 +42,9 @@ Thumbs.db
 .ink/identity.json
 .ink/runtime/
 *.png
+
+# Local database dumps — these run to many GB, never commit them
+.supabase-backups/
+
+# Expo
+.expo/

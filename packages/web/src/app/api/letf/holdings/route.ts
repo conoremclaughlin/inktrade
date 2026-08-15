@@ -10,7 +10,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'symbol is required' }, { status: 400 });
   }
 
-  if (!lookupLetf(symbol)) {
+  const registry = lookupLetf(symbol);
+  if (!registry) {
     return NextResponse.json(
       { error: `${symbol} is not a recognized leveraged ETF` },
       { status: 404 },
@@ -18,7 +19,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const summary = await yf.quoteSummary(symbol, {
+    /*
+     * Ask about the INDEX, not the leveraged fund.
+     *
+     * Both clients label this section as the underlying — "Underlying
+     * Holdings" on web, "Inside QQQ" on mobile — but this used to query
+     * topHoldings for the LETF itself. A swap-based fund doesn't hold the
+     * index; it holds collateral. TQQQ came back as a money-market fund at
+     * 15.2% and three token equity positions, presented as though it were
+     * what QQQ is made of.
+     */
+    const summary = await yf.quoteSummary(registry.underlyingTicker, {
       modules: ['topHoldings'],
     });
 

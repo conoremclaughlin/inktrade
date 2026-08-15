@@ -1,4 +1,11 @@
+'use client';
+
+import { useUser, useSignOut } from '@/lib/hooks/use-auth';
+
 export function Navbar() {
+  const { user, isAuthenticated, isLoading } = useUser();
+  const handleSignOut = useSignOut();
+
   return (
     <nav className="nav-blur fixed top-0 left-0 right-0 z-50 border-b border-border-subtle">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
@@ -45,6 +52,12 @@ export function Navbar() {
             Features
           </a>
           <a
+            href="/watchlist"
+            className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
+          >
+            Watchlist
+          </a>
+          <a
             href="/calculator"
             className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
           >
@@ -63,33 +76,69 @@ export function Navbar() {
             Stock
           </a>
           <a
+            href="/chain"
+            className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
+          >
+            Chain
+          </a>
+          <a
+            href="/trade"
+            className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
+          >
+            Trade
+          </a>
+          <a
+            href="/lots"
+            className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
+          >
+            Lots
+          </a>
+          <a
             href="/strategies"
             className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
           >
             Strategies
           </a>
           <a
-            href="#pricing"
+            href="/settings"
             className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
           >
-            Pricing
-          </a>
-          <a
-            href="https://docs.inktrade.com"
-            className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200"
-          >
-            Docs
+            Settings
           </a>
         </div>
 
-        {/* CTA */}
+        {/* Auth */}
         <div className="flex items-center gap-3">
-          <button className="hidden sm:block text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200 px-3 py-1.5">
-            Sign in
-          </button>
-          <button className="relative group text-[13px] font-semibold text-white px-4 py-2 rounded-lg bg-gradient-to-r from-accent to-accent-dim hover:from-accent-bright hover:to-accent transition-all duration-300 shadow-[0_0_20px_rgba(59,130,246,0.2)] hover:shadow-[0_0_30px_rgba(59,130,246,0.3)]">
-            Get Early Access
-          </button>
+          {isLoading ? (
+            <div className="h-4 w-20 rounded bg-surface-raised animate-pulse" />
+          ) : isAuthenticated ? (
+            <>
+              <span className="hidden sm:block text-[12px] font-mono text-text-muted truncate max-w-[160px]">
+                {user?.email}
+              </span>
+              <button
+                onClick={handleSignOut}
+                className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200 px-3 py-1.5"
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <a
+                href="/login"
+                className="hidden sm:block text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-200 px-3 py-1.5"
+              >
+                Sign in
+              </a>
+              <a
+                href="/signup"
+                className="relative group text-[13px] font-semibold text-white px-4 py-2 rounded-lg bg-gradient-to-r from-accent to-accent-dim hover:from-accent-bright hover:to-accent transition-all duration-300 shadow-[0_0_20px_rgba(59,130,246,0.2)] hover:shadow-[0_0_30px_rgba(59,130,246,0.3)]"
+              >
+                Get Early Access
+              </a>
+            </>
+          )}
         </div>
       </div>
     </nav>

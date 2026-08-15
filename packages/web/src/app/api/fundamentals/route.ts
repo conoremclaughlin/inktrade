@@ -10,19 +10,48 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const twoYearsAgo = new Date();
-    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    const now = new Date();
+    const oneYearAgo = new Date(now);
+    oneYearAgo.setFullYear(now.getFullYear() - 1);
+    const threeYearsAgo = new Date(now);
+    threeYearsAgo.setFullYear(now.getFullYear() - 3);
 
-    const [timeSeries, summary] = await Promise.all([
+    const [recentSeries, olderSeries, summary] = await Promise.all([
       yf.fundamentalsTimeSeries(symbol, {
-        period1: twoYearsAgo.toISOString().slice(0, 10),
+        period1: threeYearsAgo.toISOString().slice(0, 10),
+        type: 'quarterly',
+        module: 'all',
+      }),
+      yf.fundamentalsTimeSeries(symbol, {
+        period1: threeYearsAgo.toISOString().slice(0, 10),
+        period2: oneYearAgo.toISOString().slice(0, 10),
         type: 'quarterly',
         module: 'all',
       }),
       yf.quoteSummary(symbol, {
-        modules: ['defaultKeyStatistics', 'summaryDetail', 'price', 'calendarEvents', 'earningsTrend'],
+        modules: ['defaultKeyStatistics', 'summaryDetail', 'price', 'calendarEvents', 'earningsTrend', 'financialData'],
       }),
     ]);
+
+    const seen = new Set<string>();
+    const timeSeries = [...olderSeries, ...recentSeries].filter((q) => {
+      const d = q.date instanceof Date ? q.date.toISOString().slice(0, 10) : String(q.date ?? '');
+      if (!d || seen.has(d)) return false;
+      seen.add(d);
+      return true;
+    });
+
+    const financialCurrency = summary.financialData?.financialCurrency ?? 'USD';
+
+    let exchangeRateToUSD: number | null = null;
+    if (financialCurrency !== 'USD') {
+      try {
+        const fxQuote = await yf.quote(`${financialCurrency}USD=X`);
+        exchangeRateToUSD = fxQuote.regularMarketPrice ?? null;
+      } catch {
+        exchangeRateToUSD = null;
+      }
+    }
 
     const sharesOutstanding =
       summary.defaultKeyStatistics?.sharesOutstanding ?? 0;
@@ -77,7 +106,7 @@ export async function GET(request: NextRequest) {
         };
       })
       .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime())
-      .slice(-6);
+      .slice(-10);
 
     const trailingPe = summary.summaryDetail?.trailingPE ?? (trailingEps > 0 ? currentPrice / trailingEps : null);
     const forwardPe = summary.summaryDetail?.forwardPE ?? (currentFyEps > 0 ? currentPrice / currentFyEps : null);
@@ -108,6 +137,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       symbol: symbol.toUpperCase(),
+      financialCurrency,
+      exchangeRateToUSD,
       sharesOutstanding,
       marketCap,
       trailingEps,
